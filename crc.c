@@ -118,10 +118,12 @@ params_t crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, boo
        3- Use x^(n-1) mod p for computing the constants. This method appears to work and it is the simplest to implement.
        This basically makes the CLMUL instruction compute the correct result despite the fact that we are working in the reflected domain*/
 
-    //x^(512+64) mod p, p is scaled by x^(64 - w), reflected: (x^(512+64-1) mod p)'
+    //Reflected:    (x^(512+64-1) mod p)'
+    //Non-reflected  x^(512+64) mod p
     params.k1 = refin ? reflect(xnmodp(&params, 575), 64) : xnmodp(&params, 576);
 
-    //x^512 mod p, p is scaled by x^(64 - w), reflected: (X^(512 - 1) mod p)'
+    //Reflected:    (x^(512-1) mod p)'
+    //Non-reflected  x^512 mod p
     params.k2 = refin ? reflect(xnmodp(&params, 511), 64) : xnmodp(&params, 512);
 
     crc_build_table(&params);
