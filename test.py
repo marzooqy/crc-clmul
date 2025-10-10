@@ -58,7 +58,7 @@ for name, model in models.items():
         print("clmul:", hex(value3), hex(value4), value3 == value4)
         failed = True
 
-if True:
+if failed:
     raise Exception("Test failed")
 else:
     print("The test ran successfully!")
