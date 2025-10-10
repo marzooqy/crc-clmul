@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <math.h>
 #include "crc.h"
 
 uint64_t ten_pow(int8_t n) {
@@ -44,14 +45,9 @@ void bench(uint64_t n, uint64_t len) {
 
     end = clock();
 
-    speed = (float)(len * n) / ((float)(end - start) / CLOCKS_PER_SEC) / (1024.0 * 1024.0);
+    speed = (float)(len * n) / ((float)(end - start) / CLOCKS_PER_SEC) / powf(1024, 3);
 
-    if(speed < 1000) {
-        printf(" %.2f MiB/s ", speed);
-    } else {
-        speed /= 1024.0;
-        printf(" %.2f GiB/s ", speed);
-    }
+    printf(" %.2f ", speed);
 
     //Non-Reflected
     params = crc_params(64, 0x42f0e1eba9ea3693, 0xffffffffffffffff, false, false, 0xffffffffffffffff);
@@ -64,14 +60,9 @@ void bench(uint64_t n, uint64_t len) {
 
     end = clock();
 
-    speed = (float)(len * n) / ((float)(end - start) / CLOCKS_PER_SEC) / (1024.0 * 1024.0);
+    speed = (float)(len * n) / ((float)(end - start) / CLOCKS_PER_SEC) / powf(1024, 3);
 
-    if(speed < 1000) {
-        printf("| %.2f MiB/s |\n", speed);
-    } else {
-        speed /= 1024.0;
-        printf("| %.2f GiB/s |\n", speed);
-    }
+    printf("| %.2f |\n", speed);
 
     free(buf);
 }
