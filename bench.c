@@ -46,7 +46,12 @@ void bench(uint64_t n, uint64_t len) {
 
     speed = (float)(len * n) / ((float)(end - start) / CLOCKS_PER_SEC) / (1024.0 * 1024.0);
 
-    printf(" %.2f MiB/s ", speed);
+    if(speed < 1000) {
+        printf(" %.2f MiB/s ", speed);
+    } else {
+        speed /= 1024.0;
+        printf(" %.2f GiB/s ", speed);
+    }
 
     //Non-Reflected
     params = crc_params(64, 0x42f0e1eba9ea3693, 0xffffffffffffffff, false, false, 0xffffffffffffffff);
@@ -61,14 +66,19 @@ void bench(uint64_t n, uint64_t len) {
 
     speed = (float)(len * n) / ((float)(end - start) / CLOCKS_PER_SEC) / (1024.0 * 1024.0);
 
-    printf("| %.2f MiB/s |\n", speed);
+    if(speed < 1000) {
+        printf("| %.2f MiB/s |\n", speed);
+    } else {
+        speed /= 1024.0;
+        printf("| %.2f GiB/s |\n", speed);
+    }
 
     free(buf);
 }
 
 void main() {
     printf("| Length | Reflected | Non-Reflected |\n");
-    printf("| --- | --- | --- |\n");
+    printf("| --- | :-: | :-: |\n");
 
     bench(ten_pow(7), ten_pow(2));
     bench(ten_pow(7), ten_pow(3));
