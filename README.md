@@ -8,7 +8,9 @@ The algorithm is based on the Intel paper "Fast CRC Computation for Generic Poly
 
 GCC expects the library to be compiled with the `-mssse3` and `-mpclmul` flags.
 
-### Benchmark (GiB/s)
+### Benchmark
+
+Measured in GiB/s.
 
 | Length | Reflected | Non-Reflected |
 | --- | :-: | :-: |
