@@ -1,6 +1,13 @@
 # This file is for experimenting with GF2 math and prototyping of CRC code
 # Python makes this task easier with arbitrary length integers
 
+# Everything is treated as a polynomial in the GF2 domain
+# The coefficients of each polynomial are the bits (1s and 0s) of the integer
+# Addition and subtraction are equivalent to an XOR
+# Multiplication by x^n is equivalent to a left shift by n
+# Division by x^n is a right shift by n
+# Multiplication and division of polynomials is carryless
+
 from dataclasses import dataclass
 
 def print_bin(a):

@@ -206,8 +206,6 @@ uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uin
 
         //After every multiplication the result is split into an upper and lower half
         //to avoid overflowing the register (Intel paper p8-9).
-        //I'm not actually sure which one ends up holding which half,
-        //but the way it's done now gives out the expected result.
         __m128i h1, h2, h3, h4;
         __m128i l1, l2, l3, l4;
 
