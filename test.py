@@ -59,4 +59,6 @@ for name, model in models.items():
         failed = True
 
 if failed:
-    raise Exception("Test Failed")
+    raise Exception("Test failed")
+else:
+    print("The test ran successfully!")
