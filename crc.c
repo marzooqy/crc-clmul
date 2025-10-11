@@ -32,12 +32,12 @@ Mark Adler: Calculating constants for CRC32 using PCLMULQDQ (https://stackoverfl
 
 #include <stdio.h>
 
-//Prints a 64-bit integer in hexadecimal form.
+// Prints a 64-bit integer in hexadecimal form.
 static void print_hex64(uint64_t n) {
     printf("0x%llx\n", n);
 }
 
-//Prints the value of a 128-bit register in hexadecimal form.
+// Prints the value of a 128-bit register in hexadecimal form.
 static void print_hex128(__m128i n) {
     unsigned char* c = (unsigned char*) &n;
     printf("0x");
@@ -59,8 +59,9 @@ static uint64_t reflect(uint64_t x, uint8_t w) {
     return x >> (64 - w);
 }
 
-/* Computes x^n mod p. This is similar to the regular CRC calculation
-   but we have to stop earlier, since the data isn't multiplied by x^w like in CRC. */
+/* Computes x^n mod p. This is similar to the regular CRC calculation but we have
+   to stop earlier, as the data isn't multiplied by x^w like in CRC. Assumes that
+   the polynomial has been scaled to 64-bits.*/
 static uint64_t xnmodp(params_t* params, uint16_t n) {
     uint64_t mask = (uint64_t)1 << 63;
     uint64_t mod = params->poly;
@@ -100,36 +101,45 @@ static void crc_build_table(params_t *params) {
 }
 
 /* Returns a params_t struct with the specified parameters.
-   The table and other constants are computed as well */
+   The table and other constants are computed as well. */
 params_t crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, bool refout, uint64_t xorout) {
     params_t params;
     params.width = width;
 
-    //Reflected: p'
-    //Non-reflected: p * x^(64-w)
+    //Reflected:     (p * x^(64-w))'
+    //Non-reflected:  p * x^(64-w)
     params.poly = refin ? reflect(poly, width) : poly << (64 - width);
 
     params.refin = refin;
     params.refout = refout;
 
-    /* Reflect the init if refin or refout is true, and XOR it with xorout to
+    /* Reflect the init if refout is true, and XOR it with xorout to
        yield the result of computing the CRC of an empty buffer. */
     params.init = (refout ? reflect(init, width) : init) ^ xorout;
 
     params.xorout = xorout;
 
-    /* The Intel paper offers three different solutions for maintaining alignment in the reflected algorithm (Intel paper p18-20):
-       1- Shift to the left by 1 in each iteration. This requires an additional instruction inside the parallel folding loop.
-       2- Do the left shift on the constants instead. This seems to cause the constants to be 65-bits long in some cases, which is undesireable.
-       3- Use x^(n-1) mod p for computing the constants. This method appears to work and it is the simplest to implement.
-       This basically makes the CLMUL instruction compute the correct result despite the fact that we are working in the reflected domain. */
+    /* The Intel paper offers three different solutions for maintaining
+       alignment in the reflected algorithm (Intel paper p18-20):
 
-    //Reflected:    (x^(512+64-1) mod p)'
-    //Non-reflected  x^(512+64) mod p
+       1- Shift to the left by 1 in each iteration. This requires an
+          additional instruction inside the parallel folding loop.
+
+       2- Do the left shift on the constants instead. This seems to cause the
+          constants to be 65-bits long in some cases, which is undesireable.
+
+       3- Use x^(n-1) mod p for computing the constants. This method
+          appears to work and it is the simplest to implement.
+
+       This basically makes the CLMUL instruction compute the correct result
+       despite the fact that we are working in the reflected domain. */
+
+    //Reflected:     (x^(512+64-1) mod p)'
+    //Non-reflected:  x^(512+64) mod p
     params.k1 = refin ? xnmodp(&params, 575) : xnmodp(&params, 576);
 
-    //Reflected:    (x^(512-1) mod p)'
-    //Non-reflected  x^512 mod p
+    //Reflected:     (x^(512-1) mod p)'
+    //Non-reflected:  x^512 mod p
     params.k2 = refin ? xnmodp(&params, 511) : xnmodp(&params, 512);
 
     crc_build_table(&params);
@@ -137,10 +147,9 @@ params_t crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, boo
     return params;
 }
 
-/* Applied before computing the CRC.
-   Reverse the xorout from the last application.
-   Reflection is only necessary if either refin or refout are true.
-   if refin is false then scale the CRC by 64 - w just like the polynomial */
+/* Applied before computing the CRC. Reverse the xorout from the last application.
+   Reflect the CRC if refin or refout are true. if refin is false then scale the
+   CRC by 64 - w just like the polynomial. */
 static uint64_t crc_initial(params_t *params, uint64_t crc) {
     crc ^= params->xorout;
     if(params->refin ^ params->refout) {
@@ -152,10 +161,8 @@ static uint64_t crc_initial(params_t *params, uint64_t crc) {
     return crc;
 }
 
-/* Applied after computing the CRC.
-   If refin is false then scale back by 64 - w.
-   Reflection is only necessary in if either refin or refout are true.
-   XOR with xorout. */
+/* Applied after computing the CRC. If refin is false then scale back by 64 - w.
+   Reflect the CRC if refin or refout are true. XOR with xorout. */
 static uint64_t crc_final(params_t *params, uint64_t crc) {
     if(!params->refin) {
         crc >>= 64 - params->width;
@@ -190,19 +197,26 @@ uint64_t crc_table(params_t *params, uint64_t crc, unsigned char const *buf, uin
     return crc;
 }
 
-/* Just to clear my confusion around the selection/control bits.
-   1 picks out the 64 MSBs and 0 picks the least 64. */
+/* Just to clear my confusion around the selection/control bits of the PCLMULQDQ
+   instruction. 1 picks out the 64 MSBs and 0 picks the least 64. The left control
+   bit is for b and the right is for a */
+
 // #define CLMUL(a, b, ac, bc) _mm_clmulepi64_si128(a, b, (bc ? 0x10 : 0x00) | (ac ? 0x01 : 0x00))
 
 /* Hardware accelerated algorithm based on the version used in Chromium.
-   The fold-by-4 method (Intel paper p11-12) is used to reduce the buffer to a smaller buffer
-   "congruent (modulo the polynomial) to the original one" (Intel paper p7).
-   Since the new buffer is congruent, we could just use the table-based algorithm on the new buffer to find the CRC.
-   This allows us to skip much of the paper.
-   This shouldn't affect performance much, since the table-wise algorithm is used for less than 200 bytes.
-   It would be noticably slower if the input data buffer is small, but in that case peformance doesn't matter.
-   It should be possible to extend this algorithm to use the 256 and 512 bit variants of PCLMULQDQ,
-   using a similar approach to the one shown here.*/
+
+   The fold-by-4 method (Intel paper p11-12) is used to reduce the buffer to a smaller
+   buffer "congruent (modulo the polynomial) to the original one" (Intel paper p7).
+   Since the new buffer is congruent, we could just use the table-based algorithm
+   on the new buffer to find the CRC. This allows us to skip much of the paper.
+
+   This shouldn't affect performance much, since the table-wise algorithm is used
+   for less than 200 bytes. It would be noticably slower if the input data buffer
+   is small, but in that case peformance doesn't matter.
+
+   It should be possible to extend this algorithm to use the 256 and 512 bit
+   variants of PCLMULQDQ, using a similar approach to the one shown here.*/
+
 uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len) {
     crc = crc_initial(params, crc);
 
@@ -212,8 +226,8 @@ uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uin
         __m128i x = _mm_loadu_si128((__m128i*)k2k1);
         __m128i b1, b2, b3, b4;
 
-        //After every multiplication the result is split into an upper and lower half
-        //to avoid overflowing the register (Intel paper p8-9).
+        //After every multiplication the result is split into an upper and
+        //lower half to avoid overflowing the register (Intel paper p8-9).
         __m128i h1, h2, h3, h4;
         __m128i l1, l2, l3, l4;
 
@@ -247,10 +261,10 @@ uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uin
                 l4 = _mm_clmulepi64_si128(b4, x, 0x01);
 
                 //Load the next chunk into the registers.
-                b1 = _mm_loadu_si128((__m128i *)(buf + 0x00));
-                b2 = _mm_loadu_si128((__m128i *)(buf + 0x10));
-                b3 = _mm_loadu_si128((__m128i *)(buf + 0x20));
-                b4 = _mm_loadu_si128((__m128i *)(buf + 0x30));
+                b1 = _mm_loadu_si128((__m128i*)(buf + 0x00));
+                b2 = _mm_loadu_si128((__m128i*)(buf + 0x10));
+                b3 = _mm_loadu_si128((__m128i*)(buf + 0x20));
+                b4 = _mm_loadu_si128((__m128i*)(buf + 0x30));
 
                 //XOR.
                 b1 = _mm_xor_si128(b1, h1);
@@ -307,10 +321,10 @@ uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uin
                 l4 = _mm_clmulepi64_si128(b4, x, 0x00);
 
                 //Load the next chunk into the registers.
-                b1 = _mm_loadu_si128((__m128i *)(buf + 0x00));
-                b2 = _mm_loadu_si128((__m128i *)(buf + 0x10));
-                b3 = _mm_loadu_si128((__m128i *)(buf + 0x20));
-                b4 = _mm_loadu_si128((__m128i *)(buf + 0x30));
+                b1 = _mm_loadu_si128((__m128i*)(buf + 0x00));
+                b2 = _mm_loadu_si128((__m128i*)(buf + 0x10));
+                b3 = _mm_loadu_si128((__m128i*)(buf + 0x20));
+                b4 = _mm_loadu_si128((__m128i*)(buf + 0x30));
 
                 //Byte swap.
                 b1 = _mm_shuffle_epi8(b1, m);

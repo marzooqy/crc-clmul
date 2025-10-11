@@ -1,9 +1,7 @@
 from bindings import *
 from models import models
 
-LEN = 300
-test_data = bytes(b & 0xff for b in range(LEN))
-
+test_data = bytes(b & 0xff for b in range(300))
 failed = False
 
 for name, model in models.items():
