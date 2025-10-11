@@ -60,7 +60,8 @@ static uint64_t reflect(uint64_t x, uint8_t w) {
 }
 
 /* Computes x^n mod p. This is similar to the regular CRC calculation
-   but we have to stop earlier, since the data isn't multiplied by x^w like in CRC. */
+   but we have to stop earlier, since the data isn't multiplied by x^w like in CRC.
+   Assumes that the polynomial has been scaled to 64-bits.*/
 static uint64_t xnmodp(params_t* params, uint16_t n) {
     uint64_t mask = (uint64_t)1 << 63;
     uint64_t mod = params->poly;
