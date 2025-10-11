@@ -9,16 +9,16 @@
 
    width is the width of the polynomial.
 
-   The polynomial is the divisor in the CRC algorithm.
+   poly is the divisor in the CRC algorithm.
 
-   spoly is the "scaled" polynomial, which is multiplied by x^(64 - w). In the non-reflected table algorithm,
+   When refin is false, poly is multiplied by x^(64 - w). In the non-reflected table algorithm,
    this truncates any bits that are shifted out of the register from the left. In the non-reflected SIMD algorithm,
    this converts any CRC to 64 bits (Intel paper p16), allowing us to use the same algorithm for all CRC parameters
    without any adjustments. This has the additional benefit of using the same alignment for both algorithms.
 
-   rpoly is the reflected polynomial, which is used when refin is true.
+   When refin is true, poly is reflected.
 
-   Polynomials have an implicit x^(w+1) factor, which is typically not included in code.
+   Polynomials have an implicit x^(w+1) term, which is typically not included in code.
    The CRC could be computed without it, and CRC64 would require a larger integer if it were used.
 
    refin specifies if the incoming bytes should be reflected before being used to compute the CRC.
@@ -39,8 +39,7 @@
 
 typedef struct {
     uint8_t width;
-    uint64_t spoly;
-    uint64_t rpoly;
+    uint64_t poly;
     bool refin;
     bool refout;
     uint64_t init;

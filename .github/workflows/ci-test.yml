@@ -19,6 +19,6 @@ jobs:
     - name: Compile library
       run: |
             gcc -O3 -fPIC -mssse3 -mpclmul -c crc.c
-            gcc -shared crc.o -o crc.dll
+            gcc -shared crc.o -o test/crc.dll
     - name: Run test
-      run: python test.py
+      run: python test/test.py
