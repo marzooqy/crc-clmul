@@ -32,12 +32,12 @@ Mark Adler: Calculating constants for CRC32 using PCLMULQDQ (https://stackoverfl
 
 #include <stdio.h>
 
-/* Prints a 64-bit integer in hexadecimal form. */
+// Prints a 64-bit integer in hexadecimal form.
 static void print_hex64(uint64_t n) {
     printf("0x%llx\n", n);
 }
 
-/* Prints the value of a 128-bit register in hexadecimal form. */
+// Prints the value of a 128-bit register in hexadecimal form.
 static void print_hex128(__m128i n) {
     unsigned char* c = (unsigned char*) &n;
     printf("0x");
