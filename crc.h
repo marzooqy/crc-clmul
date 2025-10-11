@@ -32,7 +32,7 @@
 
    xorout is XORed with the CRC at the end of the calculation.
 
-   k1 and k2 are the constant used to fold the buffer (Intel paper p12).
+   k1 and k2 are the constants used to fold the buffer (Intel paper p12).
 
    table holds the values for the byte-by-byte (or Sarwate) algorithm.
    It's the result of computing the CRC for every possible input byte.*/
