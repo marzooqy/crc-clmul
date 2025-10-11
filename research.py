@@ -5,7 +5,7 @@
 # The coefficients of each polynomial are the bits (1s and 0s) of the integer
 # Addition and subtraction are equivalent to an XOR
 # Multiplication by x^n is equivalent to a left shift by n
-# Division by x^n is a right shift by n
+# Division by x^n shifts to the right by n bits
 # Multiplication and division of polynomials is carryless
 
 from dataclasses import dataclass
@@ -236,7 +236,7 @@ def crc_clmul(model, buf):
 
         data = (x1 << 48 * 8) | (x2 << 32 * 8) | (x3 << 16 * 8) | x4
         data = (data << length * 8) | int.from_bytes(buf[pos:], 'big')
-        crc = mod(data << 64, p) >> model.width
+        crc = mod(data << 64, p) >> (64 - model.width)
 
         #return crc
         if model.refout:

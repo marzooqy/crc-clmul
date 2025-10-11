@@ -59,16 +59,20 @@ static uint64_t reflect(uint64_t x, uint8_t w) {
     return x >> (64 - w);
 }
 
-/* Computes x^n mod p. The polynomial is assumed to be scaled by x^(64-w).
-   This is similar to the regular CRC calculation but we have to stop earlier
-   since we don't have the extra x^w factor that's in the CRC definition.
-   */
+/* Computes x^n mod p. This is similar to the regular CRC calculation
+   but we have to stop earlier, since the data isn't multiplied by x^w like in CRC. */
 static uint64_t xnmodp(params_t* params, uint16_t n) {
     uint64_t mask = (uint64_t)1 << 63;
-    uint64_t mod = params->spoly;
+    uint64_t mod = params->poly;
 
-    while(n-- > 64) {
-        mod = mod & mask ? (mod << 1) ^ params->spoly : mod << 1;
+    if(params->refin) {
+        while(n-- > 64) {
+            mod = mod & 1 ? (mod >> 1) ^ params->poly : mod >> 1;
+        }
+    } else {
+        while(n-- > 64) {
+            mod = mod & mask ? (mod << 1) ^ params->poly : mod << 1;
+        }
     }
 
     return mod;
@@ -81,14 +85,14 @@ static void crc_build_table(params_t *params) {
 
         if(params->refin) {
             for(uint8_t j = 0; j < 8; j++) {
-                crc = crc & 1 ? (crc >> 1) ^ params->rpoly : crc >> 1;
+                crc = crc & 1 ? (crc >> 1) ^ params->poly : crc >> 1;
             }
         }
         else {
             uint64_t mask = (uint64_t)1 << 63;
             crc <<= 56;
             for(uint8_t j = 0; j < 8; j++) {
-                crc = crc & mask ? (crc << 1) ^ params->spoly : crc << 1;
+                crc = crc & mask ? (crc << 1) ^ params->poly : crc << 1;
             }
         }
         params->table[i] = crc;
@@ -99,10 +103,12 @@ static void crc_build_table(params_t *params) {
    The table and other constants are computed as well */
 params_t crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, bool refout, uint64_t xorout) {
     params_t params;
-
     params.width = width;
-    params.spoly = poly << (64 - width); //p * x^(64 - w)
-    params.rpoly = reflect(poly, width);
+
+    //Reflected: p'
+    //Non-reflected: p * x^(64-w)
+    params.poly = refin ? reflect(poly, width) : poly << (64 - width);
+
     params.refin = refin;
     params.refout = refout;
 
@@ -112,19 +118,19 @@ params_t crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, boo
 
     params.xorout = xorout;
 
-    /* The Intel paper offers three different solutions for maintaining alignment in the reflected case (Intel paper p18-20):
-       1- Shift to the left by 1 in each iteration. This requires an additional instruction inside the loop.
+    /* The Intel paper offers three different solutions for maintaining alignment in the reflected algorithm (Intel paper p18-20):
+       1- Shift to the left by 1 in each iteration. This requires an additional instruction inside the parallel folding loop.
        2- Do the left shift on the constants instead. This seems to cause the constants to be 65-bits long in some cases, which is undesireable.
        3- Use x^(n-1) mod p for computing the constants. This method appears to work and it is the simplest to implement.
-       This basically makes the CLMUL instruction compute the correct result despite the fact that we are working in the reflected domain*/
+       This basically makes the CLMUL instruction compute the correct result despite the fact that we are working in the reflected domain. */
 
     //Reflected:    (x^(512+64-1) mod p)'
     //Non-reflected  x^(512+64) mod p
-    params.k1 = refin ? reflect(xnmodp(&params, 575), 64) : xnmodp(&params, 576);
+    params.k1 = refin ? xnmodp(&params, 575) : xnmodp(&params, 576);
 
     //Reflected:    (x^(512-1) mod p)'
     //Non-reflected  x^512 mod p
-    params.k2 = refin ? reflect(xnmodp(&params, 511), 64) : xnmodp(&params, 512);
+    params.k2 = refin ? xnmodp(&params, 511) : xnmodp(&params, 512);
 
     crc_build_table(&params);
 
@@ -133,7 +139,7 @@ params_t crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, boo
 
 /* Applied before computing the CRC.
    Reverse the xorout from the last application.
-   Reflection is only necessary in if either refin or refout are true.
+   Reflection is only necessary if either refin or refout are true.
    if refin is false then scale the CRC by 64 - w just like the polynomial */
 static uint64_t crc_initial(params_t *params, uint64_t crc) {
     crc ^= params->xorout;
@@ -192,10 +198,10 @@ uint64_t crc_table(params_t *params, uint64_t crc, unsigned char const *buf, uin
    The fold-by-4 method (Intel paper p11-12) is used to reduce the buffer to a smaller buffer
    "congruent (modulo the polynomial) to the original one" (Intel paper p7).
    Since the new buffer is congruent, we could just use the table-based algorithm on the new buffer to find the CRC.
-   This allows to skip much of the paper.
+   This allows us to skip much of the paper.
    This shouldn't affect performance much, since the table-wise algorithm is used for less than 200 bytes.
    It would be noticably slower if the input data buffer is small, but in that case peformance doesn't matter.
-   It should be possible to extend this algorithm to use 256 and 512 bit variants of PCLMULQDQ,
+   It should be possible to extend this algorithm to use the 256 and 512 bit variants of PCLMULQDQ,
    using a similar approach to the one shown here.*/
 uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len) {
     crc = crc_initial(params, crc);
@@ -221,6 +227,7 @@ uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uin
             b3 = _mm_loadu_si128((__m128i*)(buf + 0x20));
             b4 = _mm_loadu_si128((__m128i*)(buf + 0x30));
 
+            //XOR with the init.
             b1 = _mm_xor_si128(b1, _mm_cvtsi64_si128(crc));
 
             buf += 64;
