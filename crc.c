@@ -191,7 +191,8 @@ uint64_t crc_table(params_t *params, uint64_t crc, unsigned char const *buf, uin
 }
 
 /* Just to clear my confusion around the selection/control bits.
-   1 picks out the 64 MSBs and 0 picks the least 64. */
+   1 picks out the 64 MSBs and 0 picks the least 64.
+   The left control bit is for b and the right is for a */
 // #define CLMUL(a, b, ac, bc) _mm_clmulepi64_si128(a, b, (bc ? 0x10 : 0x00) | (ac ? 0x01 : 0x00))
 
 /* Hardware accelerated algorithm based on the version used in Chromium.
@@ -203,6 +204,7 @@ uint64_t crc_table(params_t *params, uint64_t crc, unsigned char const *buf, uin
    It would be noticably slower if the input data buffer is small, but in that case peformance doesn't matter.
    It should be possible to extend this algorithm to use the 256 and 512 bit variants of PCLMULQDQ,
    using a similar approach to the one shown here.*/
+
 uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len) {
     crc = crc_initial(params, crc);
 
