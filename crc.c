@@ -3,30 +3,6 @@
 #include <wmmintrin.h>
 #include "crc.h"
 
-/* References:
-- GF2 Math:
-Joey: pclmulqdq Tricks (https://wunkolo.github.io/post/2020/05/pclmulqdq-tricks)
-Tad McCorkle: Cyclic Redundancy Check (https://tadmccorkle.com/blog/posts/cyclic-redundancy-check)
-
-- CRC Basics and Software Implementations:
-Ross Williams: A PAINLESS GUIDE TO CRC ERROR DETECTION ALGORITHMS (https://www.zlib.net/crc_v3.txt)
-Bastian Molkenthin: Understanding CRC (https://www.sunshine2k.de/articles/coding/crc/understanding_crc.html)
-Greg Cook: Catalogue of parametrised CRC algorithms (https://reveng.sourceforge.io/crc-catalogue)
-Stephan Brumme: Fast CRC32 (https://create.stephan-brumme.com/crc32)
-Mark Adler: crcany (https://github.com/madler/crcany)
-
-- Intel Intrinsics:
-Daniel Graham and Charles Reiss: A Quick Guide to SSE/SIMD (https://www.cs.virginia.edu/~cr4bd/3330/F2018/simdref.html)
-Intel: Intel Intrinsics Guide (https://www.intel.com/content/www/us/en/docs/intrinsics-guide/index.html)
-Stack Overflow Answer: Header files for x86 SIMD intrinsics (https://stackoverflow.com/a/11228864)
-Free Software Foundation: GCC's x86 Compile Options (https://gcc.gnu.org/onlinedocs/gcc/x86-Options.html)
-
-- Hardware Acceleration using the CLMUL Instruction:
-Intel: Fast CRC Computation for Generic Polynomials Using PCLMULQDQ Instruction (https://web.archive.org/web/20230315165408/https://www.intel.com/content/dam/www/public/us/en/documents/white-papers/fast-crc-computation-generic-polynomials-pclmulqdq-paper.pdf)
-Chromium: Chromium's CRC32 implementation (https://chromium.googlesource.com/chromium/src/third_party/zlib/+/refs/heads/main/crc32_simd.c)
-Mark Adler: Calculating constants for CRC32 using PCLMULQDQ (https://stackoverflow.com/a/21201497)
-*/
-
 /*
 //Debug code
 
