@@ -106,8 +106,8 @@ params_t crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, boo
     params_t params;
     params.width = width;
 
-    //Reflected:     p'
-    //Non-reflected: p * x^(64-w)
+    //Reflected:     (p * x^(64-w))'
+    //Non-reflected:  p * x^(64-w)
     params.poly = refin ? reflect(poly, width) : poly << (64 - width);
 
     params.refin = refin;
@@ -161,7 +161,7 @@ static uint64_t crc_initial(params_t *params, uint64_t crc) {
     return crc;
 }
 
-/* Applied after computing the CRC. f refin is false then scale back by 64 - w.
+/* Applied after computing the CRC. If refin is false then scale back by 64 - w.
    Reflect the CRC if refin or refout are true. XOR with xorout. */
 static uint64_t crc_final(params_t *params, uint64_t crc) {
     if(!params->refin) {
