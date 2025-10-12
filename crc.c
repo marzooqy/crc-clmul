@@ -106,14 +106,14 @@ params_t crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, boo
     params_t params;
     params.width = width;
 
-    //Reflected: p'
+    //Reflected:     p'
     //Non-reflected: p * x^(64-w)
     params.poly = refin ? reflect(poly, width) : poly << (64 - width);
 
     params.refin = refin;
     params.refout = refout;
 
-    /* Reflect the init if refin or refout is true, and XOR it with xorout to
+    /* Reflect the init if refout is true, and XOR it with xorout to
        yield the result of computing the CRC of an empty buffer. */
     params.init = (refout ? reflect(init, width) : init) ^ xorout;
 
@@ -134,12 +134,12 @@ params_t crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, boo
        This basically makes the CLMUL instruction compute the correct result
        despite the fact that we are working in the reflected domain. */
 
-    //Reflected:    (x^(512+64-1) mod p)'
-    //Non-reflected  x^(512+64) mod p
+    //Reflected:     (x^(512+64-1) mod p)'
+    //Non-reflected:  x^(512+64) mod p
     params.k1 = refin ? xnmodp(&params, 575) : xnmodp(&params, 576);
 
-    //Reflected:    (x^(512-1) mod p)'
-    //Non-reflected  x^512 mod p
+    //Reflected:     (x^(512-1) mod p)'
+    //Non-reflected:  x^512 mod p
     params.k2 = refin ? xnmodp(&params, 511) : xnmodp(&params, 512);
 
     crc_build_table(&params);
@@ -148,8 +148,8 @@ params_t crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, boo
 }
 
 /* Applied before computing the CRC. Reverse the xorout from the last application.
-   Reflection is only necessary if either refin or refout are true. if refin is
-   false then scale the CRC by 64 - w just like the polynomial. */
+   Reflect the CRC if refin or refout are true. if refin is false then scale the
+   CRC by 64 - w just like the polynomial. */
 static uint64_t crc_initial(params_t *params, uint64_t crc) {
     crc ^= params->xorout;
     if(params->refin ^ params->refout) {
@@ -161,10 +161,8 @@ static uint64_t crc_initial(params_t *params, uint64_t crc) {
     return crc;
 }
 
-/* Applied after computing the CRC.
-   If refin is false then scale back by 64 - w.
-   Reflection is only necessary in if either refin or refout are true.
-   XOR with xorout. */
+/* Applied after computing the CRC. f refin is false then scale back by 64 - w.
+   Reflect the CRC if refin or refout are true. XOR with xorout. */
 static uint64_t crc_final(params_t *params, uint64_t crc) {
     if(!params->refin) {
         crc >>= 64 - params->width;
@@ -199,9 +197,10 @@ uint64_t crc_table(params_t *params, uint64_t crc, unsigned char const *buf, uin
     return crc;
 }
 
-/* Just to clear my confusion around the selection/control bits.
-   1 picks out the 64 MSBs and 0 picks the least 64.
-   The left control bit is for b and the right is for a */
+/* Just to clear my confusion around the selection/control bits of the PCLMULQDQ
+   instruction. 1 picks out the 64 MSBs and 0 picks the least 64. The left control
+   bit is for b and the right is for a */
+
 // #define CLMUL(a, b, ac, bc) _mm_clmulepi64_si128(a, b, (bc ? 0x10 : 0x00) | (ac ? 0x01 : 0x00))
 
 /* Hardware accelerated algorithm based on the version used in Chromium.
