@@ -221,9 +221,8 @@ uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uin
     crc = crc_initial(params, crc);
 
     if(len >= 128) {
-        uint64_t k2k1[] = {params->k2, params->k1};
-
-        __m128i x = _mm_loadu_si128((__m128i*)k2k1);
+        __m128i k2k1 = _mm_setr_epi32(params->k2 & 0xffffffff, params->k2 >> 32,
+                                      params->k1 & 0xffffffff, params->k1 >> 32);
         __m128i b1, b2, b3, b4;
 
         //After every multiplication the result is split into an upper and
@@ -249,16 +248,16 @@ uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uin
 
             while(len >= 64) {
                 //Multiply by k2.
-                h1 = _mm_clmulepi64_si128(b1, x, 0x10);
-                h2 = _mm_clmulepi64_si128(b2, x, 0x10);
-                h3 = _mm_clmulepi64_si128(b3, x, 0x10);
-                h4 = _mm_clmulepi64_si128(b4, x, 0x10);
+                h1 = _mm_clmulepi64_si128(b1, k2k1, 0x10);
+                h2 = _mm_clmulepi64_si128(b2, k2k1, 0x10);
+                h3 = _mm_clmulepi64_si128(b3, k2k1, 0x10);
+                h4 = _mm_clmulepi64_si128(b4, k2k1, 0x10);
 
                 //Multiply by k1.
-                l1 = _mm_clmulepi64_si128(b1, x, 0x01);
-                l2 = _mm_clmulepi64_si128(b2, x, 0x01);
-                l3 = _mm_clmulepi64_si128(b3, x, 0x01);
-                l4 = _mm_clmulepi64_si128(b4, x, 0x01);
+                l1 = _mm_clmulepi64_si128(b1, k2k1, 0x01);
+                l2 = _mm_clmulepi64_si128(b2, k2k1, 0x01);
+                l3 = _mm_clmulepi64_si128(b3, k2k1, 0x01);
+                l4 = _mm_clmulepi64_si128(b4, k2k1, 0x01);
 
                 //Load the next chunk into the registers.
                 b1 = _mm_loadu_si128((__m128i*)(buf + 0x00));
@@ -309,16 +308,16 @@ uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uin
 
             while(len >= 64) {
                 //Multiply by k1.
-                h1 = _mm_clmulepi64_si128(b1, x, 0x11);
-                h2 = _mm_clmulepi64_si128(b2, x, 0x11);
-                h3 = _mm_clmulepi64_si128(b3, x, 0x11);
-                h4 = _mm_clmulepi64_si128(b4, x, 0x11);
+                h1 = _mm_clmulepi64_si128(b1, k2k1, 0x11);
+                h2 = _mm_clmulepi64_si128(b2, k2k1, 0x11);
+                h3 = _mm_clmulepi64_si128(b3, k2k1, 0x11);
+                h4 = _mm_clmulepi64_si128(b4, k2k1, 0x11);
 
                 //Multiply by k2.
-                l1 = _mm_clmulepi64_si128(b1, x, 0x00);
-                l2 = _mm_clmulepi64_si128(b2, x, 0x00);
-                l3 = _mm_clmulepi64_si128(b3, x, 0x00);
-                l4 = _mm_clmulepi64_si128(b4, x, 0x00);
+                l1 = _mm_clmulepi64_si128(b1, k2k1, 0x00);
+                l2 = _mm_clmulepi64_si128(b2, k2k1, 0x00);
+                l3 = _mm_clmulepi64_si128(b3, k2k1, 0x00);
+                l4 = _mm_clmulepi64_si128(b4, k2k1, 0x00);
 
                 //Load the next chunk into the registers.
                 b1 = _mm_loadu_si128((__m128i*)(buf + 0x00));
