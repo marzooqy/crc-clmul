@@ -321,10 +321,10 @@ uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uin
                 l4 = _mm_clmulepi64_si128(b4, x, 0x00);
 
                 //Load the next chunk into the registers.
-                b1 = _mm_loadu_si128((__m128i *)(buf + 0x00));
-                b2 = _mm_loadu_si128((__m128i *)(buf + 0x10));
-                b3 = _mm_loadu_si128((__m128i *)(buf + 0x20));
-                b4 = _mm_loadu_si128((__m128i *)(buf + 0x30));
+                b1 = _mm_loadu_si128((__m128i*)(buf + 0x00));
+                b2 = _mm_loadu_si128((__m128i*)(buf + 0x10));
+                b3 = _mm_loadu_si128((__m128i*)(buf + 0x20));
+                b4 = _mm_loadu_si128((__m128i*)(buf + 0x30));
 
                 //Byte swap.
                 b1 = _mm_shuffle_epi8(b1, m);
