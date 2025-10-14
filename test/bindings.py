@@ -1,7 +1,15 @@
 import ctypes
 import os
+import sys
 
-_crc = ctypes.CDLL(os.path.join(os.path.dirname(__file__), 'crc.dll'))
+if sys.platform == 'win32':
+    ext = '.dll'
+elif sys.platform == 'darwin':
+    ext = '.dylib'
+else:
+    ext = '.so'
+
+_crc = ctypes.CDLL(os.path.join(os.path.dirname(__file__), 'crc' + ext))
 
 class params_t(ctypes.Structure):
     _fields_ = [('width', ctypes.c_uint8),

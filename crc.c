@@ -39,7 +39,6 @@ static uint64_t reflect(uint64_t x, uint8_t w) {
    to stop earlier, as the data isn't multiplied by x^w like in CRC. Assumes that
    the polynomial has been scaled to 64-bits.*/
 static uint64_t xnmodp(params_t* params, uint16_t n) {
-    uint64_t mask = (uint64_t)1 << 63;
     uint64_t mod = params->poly;
 
     if(params->refin) {
@@ -47,6 +46,7 @@ static uint64_t xnmodp(params_t* params, uint16_t n) {
             mod = mod & 1 ? (mod >> 1) ^ params->poly : mod >> 1;
         }
     } else {
+        uint64_t mask = (uint64_t)1 << 63;
         while(n-- > 64) {
             mod = mod & mask ? (mod << 1) ^ params->poly : mod << 1;
         }
@@ -197,8 +197,10 @@ uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uin
     crc = crc_initial(params, crc);
 
     if(len >= 128) {
+        __m128i c = _mm_setr_epi32(crc & 0xffffffff, crc >> 32, 0, 0);
         __m128i k2k1 = _mm_setr_epi32(params->k2 & 0xffffffff, params->k2 >> 32,
                                       params->k1 & 0xffffffff, params->k1 >> 32);
+
         __m128i b1, b2, b3, b4;
 
         //After every multiplication the result is split into an upper and
@@ -217,7 +219,7 @@ uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uin
             b4 = _mm_loadu_si128((__m128i*)(buf + 0x30));
 
             //XOR with the init.
-            b1 = _mm_xor_si128(b1, _mm_cvtsi64_si128(crc));
+            b1 = _mm_xor_si128(b1, c);
 
             buf += 64;
             len -= 64;
@@ -277,7 +279,7 @@ uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uin
             b4 = _mm_shuffle_epi8(b4, m);
 
             //XOR the left side of buf with the initial value.
-            b1 = _mm_xor_si128(b1, _mm_slli_si128(_mm_cvtsi64_si128(crc), 8));
+            b1 = _mm_xor_si128(b1, _mm_slli_si128(c, 8));
 
             buf += 64;
             len -= 64;

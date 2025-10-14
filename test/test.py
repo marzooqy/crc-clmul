@@ -31,6 +31,15 @@ for name, model in models.items():
         print("clmul:", hex(value3), hex(value4), value3 == value4)
         failed = True
 
+    # Test 4: Test crc_clmul in chunks
+    value5 = crc_clmul(params, params.init, test_data[:150])
+    value5 = crc_clmul(params, value5, test_data[150:])
+
+    if value5 != value4:
+        print(name)
+        print("clmul:", hex(value5), hex(value4), value5 == value4)
+        failed = True
+
 if failed:
     raise Exception("Test failed")
 else:
