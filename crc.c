@@ -1,9 +1,6 @@
-#include <emmintrin.h>
-#include <tmmintrin.h>
-#include <wmmintrin.h>
 #include "crc.h"
+#include "intrinsics.h"
 
-/*
 //Debug code
 
 #include <stdio.h>
@@ -14,7 +11,7 @@ static void print_hex64(uint64_t n) {
 }
 
 // Prints the value of a 128-bit register in hexadecimal form.
-static void print_hex128(__m128i n) {
+static void print_hex128(uint128_t n) {
     unsigned char* c = (unsigned char*) &n;
     printf("0x");
     for(uint8_t i = 0; i < 16; i++) {
@@ -22,7 +19,6 @@ static void print_hex128(__m128i n) {
     }
     printf("\n");
 }
-*/
 
 /* Reflects an integer x of width w */
 static uint64_t reflect(uint64_t x, uint8_t w) {
@@ -173,12 +169,6 @@ uint64_t crc_table(params_t *params, uint64_t crc, unsigned char const *buf, uin
     return crc;
 }
 
-/* Just to clear my confusion around the selection/control bits of the PCLMULQDQ
-   instruction. 1 picks out the 64 MSBs and 0 picks the least 64. The left control
-   bit is for b and the right is for a */
-
-// #define CLMUL(a, b, ac, bc) _mm_clmulepi64_si128(a, b, (bc ? 0x10 : 0x00) | (ac ? 0x01 : 0x00))
-
 /* Hardware accelerated algorithm based on the version used in Chromium.
 
    The fold-by-4 method (Intel paper p11-12) is used to reduce the buffer to a smaller
@@ -186,73 +176,71 @@ uint64_t crc_table(params_t *params, uint64_t crc, unsigned char const *buf, uin
    Since the new buffer is congruent, we could just use the table-based algorithm
    on the new buffer to find the CRC. This allows us to skip much of the paper.
 
-   This shouldn't affect performance much, since the table-wise algorithm is used
-   for less than 200 bytes. It would be noticably slower if the input data buffer
-   is small, but in that case peformance doesn't matter.
+   This doesn't affect performance much, as the table-wise algorithm is used
+   for < 192 bytes. It would be noticably slower if the input data buffer is
+   small, but in that case the speed of the table algorithm is enough.
 
    It should be possible to extend this algorithm to use the 256 and 512 bit
-   variants of PCLMULQDQ, using a similar approach to the one shown here.*/
+   variants of CLMUL, using a similar approach to the one shown here.*/
 
 uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len) {
     crc = crc_initial(params, crc);
 
     if(len >= 128) {
-        __m128i k1k2 = _mm_set_epi32(params->k1 >> 32, params->k1 & 0xffffffff,
-                                     params->k2 >> 32, params->k2 & 0xffffffff);
-
-        __m128i b1, b2, b3, b4;
+        uint128_t b1, b2, b3, b4;
 
         //After every multiplication the result is split into an upper and
         //lower half to avoid overflowing the register (Intel paper p8-9).
-        __m128i h1, h2, h3, h4;
-        __m128i l1, l2, l3, l4;
+        uint128_t h1, h2, h3, h4;
+        uint128_t l1, l2, l3, l4;
 
         if(params->refin) {
             //Reflected algorithm
             //Data alignment: [ax^0 bx^1 ... cx^n]
-            __m128i c = _mm_set_epi32(0, 0, crc >> 32, crc & 0xffffffff);
+            uint128_t c = SET(0, crc);
+            uint128_t k2k1 = SET(params->k2, params->k1);
 
             //Load 64 bytes from buf into the registers.
-            b1 = _mm_loadu_si128((__m128i*)(buf + 0x00));
-            b2 = _mm_loadu_si128((__m128i*)(buf + 0x10));
-            b3 = _mm_loadu_si128((__m128i*)(buf + 0x20));
-            b4 = _mm_loadu_si128((__m128i*)(buf + 0x30));
+            b1 = LOAD(buf + 0x00);
+            b2 = LOAD(buf + 0x10);
+            b3 = LOAD(buf + 0x20);
+            b4 = LOAD(buf + 0x30);
 
             //XOR with the init.
-            b1 = _mm_xor_si128(b1, c);
+            b1 = XOR(b1, c);
 
             buf += 64;
             len -= 64;
 
             while(len >= 64) {
                 //Multiply by k1.
-                h1 = _mm_clmulepi64_si128(b1, k1k2, 0x10);
-                h2 = _mm_clmulepi64_si128(b2, k1k2, 0x10);
-                h3 = _mm_clmulepi64_si128(b3, k1k2, 0x10);
-                h4 = _mm_clmulepi64_si128(b4, k1k2, 0x10);
+                h1 = CLMUL_LO(b1, k2k1);
+                h2 = CLMUL_LO(b2, k2k1);
+                h3 = CLMUL_LO(b3, k2k1);
+                h4 = CLMUL_LO(b4, k2k1);
 
                 //Multiply by k2.
-                l1 = _mm_clmulepi64_si128(b1, k1k2, 0x01);
-                l2 = _mm_clmulepi64_si128(b2, k1k2, 0x01);
-                l3 = _mm_clmulepi64_si128(b3, k1k2, 0x01);
-                l4 = _mm_clmulepi64_si128(b4, k1k2, 0x01);
+                l1 = CLMUL_HI(b1, k2k1);
+                l2 = CLMUL_HI(b2, k2k1);
+                l3 = CLMUL_HI(b3, k2k1);
+                l4 = CLMUL_HI(b4, k2k1);
 
                 //Load the next chunk into the registers.
-                b1 = _mm_loadu_si128((__m128i*)(buf + 0x00));
-                b2 = _mm_loadu_si128((__m128i*)(buf + 0x10));
-                b3 = _mm_loadu_si128((__m128i*)(buf + 0x20));
-                b4 = _mm_loadu_si128((__m128i*)(buf + 0x30));
+                b1 = LOAD(buf + 0x00);
+                b2 = LOAD(buf + 0x10);
+                b3 = LOAD(buf + 0x20);
+                b4 = LOAD(buf + 0x30);
 
                 //XOR.
-                b1 = _mm_xor_si128(b1, h1);
-                b2 = _mm_xor_si128(b2, h2);
-                b3 = _mm_xor_si128(b3, h3);
-                b4 = _mm_xor_si128(b4, h4);
+                b1 = XOR(b1, h1);
+                b2 = XOR(b2, h2);
+                b3 = XOR(b3, h3);
+                b4 = XOR(b4, h4);
 
-                b1 = _mm_xor_si128(b1, l1);
-                b2 = _mm_xor_si128(b2, l2);
-                b3 = _mm_xor_si128(b3, l3);
-                b4 = _mm_xor_si128(b4, l4);
+                b1 = XOR(b1, l1);
+                b2 = XOR(b2, l2);
+                b3 = XOR(b3, l3);
+                b4 = XOR(b4, l4);
 
                 buf += 64;
                 len -= 64;
@@ -261,75 +249,76 @@ uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uin
         } else {
             //Non-reflected algorithm
             //Data alignment: [ax^n bx^(n-1) ... cx^0]
-            __m128i c = _mm_set_epi32(crc >> 32, crc & 0xffffffff, 0, 0);
+            uint128_t c = SET(crc, 0);
+            uint128_t k1k2 = SET(params->k1, params->k2);
 
             //Shuffle mask for _mm_shuffle_epi8.
             //Swaps the endianess of the register.
-            __m128i m = _mm_set_epi8(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15);
+            uint8x16_t tbl = GET_SWAP_TABLE();
 
             //Load 64 bytes from buf into the registers.
-            b1 = _mm_loadu_si128((__m128i*)(buf + 0x00));
-            b2 = _mm_loadu_si128((__m128i*)(buf + 0x10));
-            b3 = _mm_loadu_si128((__m128i*)(buf + 0x20));
-            b4 = _mm_loadu_si128((__m128i*)(buf + 0x30));
+            b1 = LOAD(buf + 0x00);
+            b2 = LOAD(buf + 0x10);
+            b3 = LOAD(buf + 0x20);
+            b4 = LOAD(buf + 0x30);
 
             //Byte swap.
-            b1 = _mm_shuffle_epi8(b1, m);
-            b2 = _mm_shuffle_epi8(b2, m);
-            b3 = _mm_shuffle_epi8(b3, m);
-            b4 = _mm_shuffle_epi8(b4, m);
+            b1 = SWAP(b1, tbl);
+            b2 = SWAP(b2, tbl);
+            b3 = SWAP(b3, tbl);
+            b4 = SWAP(b4, tbl);
 
             //XOR the left side of buf with the initial value.
-            b1 = _mm_xor_si128(b1, c);
+            b1 = XOR(b1, c);
 
             buf += 64;
             len -= 64;
 
             while(len >= 64) {
                 //Multiply by k1.
-                h1 = _mm_clmulepi64_si128(b1, k1k2, 0x11);
-                h2 = _mm_clmulepi64_si128(b2, k1k2, 0x11);
-                h3 = _mm_clmulepi64_si128(b3, k1k2, 0x11);
-                h4 = _mm_clmulepi64_si128(b4, k1k2, 0x11);
+                h1 = CLMUL_HI(b1, k1k2);
+                h2 = CLMUL_HI(b2, k1k2);
+                h3 = CLMUL_HI(b3, k1k2);
+                h4 = CLMUL_HI(b4, k1k2);
 
                 //Multiply by k2.
-                l1 = _mm_clmulepi64_si128(b1, k1k2, 0x00);
-                l2 = _mm_clmulepi64_si128(b2, k1k2, 0x00);
-                l3 = _mm_clmulepi64_si128(b3, k1k2, 0x00);
-                l4 = _mm_clmulepi64_si128(b4, k1k2, 0x00);
+                l1 = CLMUL_LO(b1, k1k2);
+                l2 = CLMUL_LO(b2, k1k2);
+                l3 = CLMUL_LO(b3, k1k2);
+                l4 = CLMUL_LO(b4, k1k2);
 
                 //Load the next chunk into the registers.
-                b1 = _mm_loadu_si128((__m128i*)(buf + 0x00));
-                b2 = _mm_loadu_si128((__m128i*)(buf + 0x10));
-                b3 = _mm_loadu_si128((__m128i*)(buf + 0x20));
-                b4 = _mm_loadu_si128((__m128i*)(buf + 0x30));
+                b1 = LOAD(buf + 0x00);
+                b2 = LOAD(buf + 0x10);
+                b3 = LOAD(buf + 0x20);
+                b4 = LOAD(buf + 0x30);
 
                 //Byte swap.
-                b1 = _mm_shuffle_epi8(b1, m);
-                b2 = _mm_shuffle_epi8(b2, m);
-                b3 = _mm_shuffle_epi8(b3, m);
-                b4 = _mm_shuffle_epi8(b4, m);
+                b1 = SWAP(b1, tbl);
+                b2 = SWAP(b2, tbl);
+                b3 = SWAP(b3, tbl);
+                b4 = SWAP(b4, tbl);
 
                 //XOR.
-                b1 = _mm_xor_si128(b1, h1);
-                b2 = _mm_xor_si128(b2, h2);
-                b3 = _mm_xor_si128(b3, h3);
-                b4 = _mm_xor_si128(b4, h4);
+                b1 = XOR(b1, h1);
+                b2 = XOR(b2, h2);
+                b3 = XOR(b3, h3);
+                b4 = XOR(b4, h4);
 
-                b1 = _mm_xor_si128(b1, l1);
-                b2 = _mm_xor_si128(b2, l2);
-                b3 = _mm_xor_si128(b3, l3);
-                b4 = _mm_xor_si128(b4, l4);
+                b1 = XOR(b1, l1);
+                b2 = XOR(b2, l2);
+                b3 = XOR(b3, l3);
+                b4 = XOR(b4, l4);
 
                 buf += 64;
                 len -= 64;
             }
 
             //Byte swap.
-            b1 = _mm_shuffle_epi8(b1, m);
-            b2 = _mm_shuffle_epi8(b2, m);
-            b3 = _mm_shuffle_epi8(b3, m);
-            b4 = _mm_shuffle_epi8(b4, m);
+            b1 = SWAP(b1, tbl);
+            b2 = SWAP(b2, tbl);
+            b3 = SWAP(b3, tbl);
+            b4 = SWAP(b4, tbl);
         }
 
         //Calculate the CRC of what's left using the table-based algorithm.
