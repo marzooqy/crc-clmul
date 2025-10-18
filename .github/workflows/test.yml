@@ -1,0 +1,72 @@
+name: Test
+
+on:
+  push:
+    branches: ["main", "arm"]
+  pull_request:
+    branches: ["main", "arm"]
+
+jobs:
+  windows:
+    name: Test on Windows
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v5
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: "3.14"
+    - name: Compile library
+      run: |
+            gcc -mssse3 -mpclmul -fPIC -O3 -c crc.c
+            gcc -shared crc.o -o test/crc.dll
+    - name: Run test
+      run: python test/test.py
+
+  arm_mac:
+    name: Test on MacOS (ARM64)
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v5
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: "3.14"
+    - name: Compile library
+      run: |
+            gcc -fPIC -O3 -c crc.c
+            gcc -dynamiclib crc.o -o test/crc.dylib
+    - name: Run test
+      run: python test/test.py
+
+  intel_mac:
+    name: Test on MacOS (x64)
+    runs-on: macos-15-intel
+    steps:
+    - uses: actions/checkout@v5
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: "3.14"
+    - name: Compile library
+      run: |
+            gcc -mssse3 -mpclmul -fPIC -O3 -c crc.c
+            gcc -dynamiclib crc.o -o test/crc.dylib
+    - name: Run test
+      run: python test/test.py
+
+  ubuntu:
+    name: Test on Ubuntu
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v5
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: "3.14"
+    - name: Compile library
+      run: |
+            gcc -mssse3 -mpclmul -fPIC -O3 -c crc.c
+            gcc -shared crc.o -o test/crc.so
+    - name: Run test
+      run: python test/test.py
