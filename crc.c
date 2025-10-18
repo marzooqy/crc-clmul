@@ -1,6 +1,7 @@
 #include "crc.h"
 #include "intrinsics.h"
 
+/*
 //Debug code
 
 #include <stdio.h>
@@ -19,6 +20,7 @@ static void print_hex128(uint128_t n) {
     }
     printf("\n");
 }
+*/
 
 /* Reflects an integer x of width w */
 static uint64_t reflect(uint64_t x, uint8_t w) {
@@ -252,9 +254,9 @@ uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uin
             uint128_t c = SET(crc, 0);
             uint128_t k1k2 = SET(params->k1, params->k2);
 
-            //Shuffle mask for _mm_shuffle_epi8.
+            //Shuffle mask/Index table to be used with the SWAP macro.
             //Swaps the endianess of the register.
-            uint8x16_t tbl = GET_SWAP_TABLE();
+            table_t tbl = GET_SWAP_TABLE();
 
             //Load 64 bytes from buf into the registers.
             b1 = LOAD(buf + 0x00);
