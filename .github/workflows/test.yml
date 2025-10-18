@@ -2,9 +2,9 @@ name: Test
 
 on:
   push:
-    branches: ["main", "arm"]
+    branches: ["main"]
   pull_request:
-    branches: ["main", "arm"]
+    branches: ["main"]
 
 jobs:
   windows:
@@ -18,7 +18,7 @@ jobs:
         python-version: "3.14"
     - name: Compile library
       run: |
-            gcc -mssse3 -mpclmul -fPIC -O3 -c crc.c
+            gcc -c -mssse3 -mpclmul -fPIC -O3 crc.c
             gcc -shared crc.o -o test/crc.dll
     - name: Run test
       run: python test/test.py
@@ -34,7 +34,7 @@ jobs:
         python-version: "3.14"
     - name: Compile library
       run: |
-            gcc -fPIC -O3 -c crc.c
+            gcc -c -fPIC -O3 crc.c
             gcc -dynamiclib crc.o -o test/crc.dylib
     - name: Run test
       run: python test/test.py
@@ -50,7 +50,7 @@ jobs:
         python-version: "3.14"
     - name: Compile library
       run: |
-            gcc -mssse3 -mpclmul -fPIC -O3 -c crc.c
+            gcc -c -mssse3 -mpclmul -fPIC -O3 crc.c
             gcc -dynamiclib crc.o -o test/crc.dylib
     - name: Run test
       run: python test/test.py
@@ -66,7 +66,7 @@ jobs:
         python-version: "3.14"
     - name: Compile library
       run: |
-            gcc -mssse3 -mpclmul -fPIC -O3 -c crc.c
+            gcc -c -mssse3 -mpclmul -fPIC -O3 crc.c
             gcc -shared crc.o -o test/crc.so
     - name: Run test
       run: python test/test.py
