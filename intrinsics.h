@@ -17,7 +17,7 @@ static const unsigned char SWAP_TABLE[] = {15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5
     typedef __m128i uint128_t;
 
     //Redundant def so the same code would work on both architectures.
-    typedef __m128i uint8x16_t;
+    typedef __m128i table_t;
 
     //Create a 128-bit integer from two 64-bit integers.
     #define SET(hi, lo) _mm_set_epi64x(hi, lo)
@@ -45,6 +45,7 @@ static const unsigned char SWAP_TABLE[] = {15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5
     #include <arm_neon.h>
 
     typedef uint64x2_t uint128_t;
+    typedef uint8x16_t table_t;
 
     //Create a 64x2 vector from two 64-bit integers.
     #define SET(hi, lo) vsetq_lane_u64(hi, vsetq_lane_u64(lo, vdupq_n_u64(0), 0), 1)
@@ -56,7 +57,8 @@ static const unsigned char SWAP_TABLE[] = {15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5
     #define LOAD(ptr) vld1q_u64((const uint64_t*)(ptr))
 
     //Multiply the high lane of two 64x2 vectors.
-    #define CLMUL_HI(a, b) vreinterpretq_u64_p128(vmull_high_p64(vreinterpretq_p64_u64(a), vreinterpretq_p64_u64(b)))
+    #define CLMUL_HI(a, b) vreinterpretq_u64_p128(vmull_high_p64(vreinterpretq_p64_u64(a), \
+                                                                 vreinterpretq_p64_u64(b)))
 
     //Multiply the low lane of two 64x2 vectors.
     //It gets ugly.

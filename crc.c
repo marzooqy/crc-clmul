@@ -252,9 +252,9 @@ uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uin
             uint128_t c = SET(crc, 0);
             uint128_t k1k2 = SET(params->k1, params->k2);
 
-            //Shuffle mask for _mm_shuffle_epi8.
+            //Shuffle mask/Index table to be used with the SWAP macro.
             //Swaps the endianess of the register.
-            uint8x16_t tbl = GET_SWAP_TABLE();
+            table_t tbl = GET_SWAP_TABLE();
 
             //Load 64 bytes from buf into the registers.
             b1 = LOAD(buf + 0x00);
