@@ -1,6 +1,7 @@
 #include "crc.h"
 #include "intrinsics.h"
 
+/*
 //Debug code
 
 #include <stdio.h>
@@ -19,6 +20,7 @@ static void print_hex128(uint128_t n) {
     }
     printf("\n");
 }
+*/
 
 /* Reflects an integer x of width w */
 static uint64_t reflect(uint64_t x, uint8_t w) {
