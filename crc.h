@@ -4,48 +4,13 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#if defined(_MSC_VER)
+#ifdef _MSC_VER
     #define DllExport __declspec(dllexport)
 #else
     #define DllExport
 #endif
 
-/* Holds frequently used CRC parameters.
-   Most of these are due to translating the algorithm from hardware to software.
-
-   width is the width of the polynomial.
-   poly is the divisor in the CRC algorithm.
-
-   When refin is false, poly is multiplied by x^(64 - w). In the non-reflected
-   table algorithm, this truncates any bits that are shifted out of the register
-   from the left. In the non-reflected SIMD algorithm, this converts any CRC to
-   64 bits (Intel paper p16), allowing us to use the same algorithm for all CRC
-   parameters without any adjustments. This has the additional benefit of using
-   the same alignment for both algorithms.
-
-   When refin is true, poly is reflected.
-
-   Polynomials have an implicit x^(w+1) term, which is typically not included in
-   code. The CRC could be computed without it, and CRC64 would require a larger
-   integer if it were used.
-
-   refin specifies if the incoming bytes should be reflected before being used
-   to compute the CRC. Alternatively we could "reflect the world" (Ross Williams
-   guide section 11). That is, we reflect the init, poly, and reverse the
-   algorithm.
-
-   refout specifies if result should be reflected at the end of the calculation.
-
-   init is the initial content of the register. It's XORed with the first few
-   incoming bits. pycrc labels it more clearly as xor_in.
-
-   xorout is XORed with the CRC at the end of the calculation.
-
-   k1 and k2 are the constants used to fold the buffer (Intel paper p12).
-
-   table holds the values for the byte-by-byte (or Sarwate) algorithm.
-   It's the result of computing the CRC for every possible input byte.*/
-
+/* Holds frequently used CRC parameters. */
 typedef struct {
     uint8_t width;
     uint64_t poly;
@@ -66,8 +31,8 @@ params_t DllExport crc_params(uint8_t width, uint64_t poly, uint64_t init, bool 
    Use params.init as the initial CRC value.*/
 uint64_t DllExport crc_table(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len);
 
-/* Calculate CRC using the SIMD algorithm.
-   Use params.init as the initial CRC value.*/
-uint64_t DllExport crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len);
+/* Calculate CRC using the SIMD algorithm. Uses the table-based algorithm if
+   SIMD intrinsics are not available. Use params.init as the initial CRC value.*/
+uint64_t DllExport crc_calc(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len);
 
 #endif

@@ -14,16 +14,16 @@ for name, model in models.items():
         print("table:", hex(value), hex(model.check), value == model.check)
         failed = True
 
-    # Test 2: Test crc_clmul when len < 128
-    value2 = crc_clmul(params, params.init, b'123456789')
+    # Test 2: Test crc_calc when len < 128
+    value2 = crc_calc(params, params.init, b'123456789')
 
     if value2 != model.check:
         print(name)
         print("clmul table:", hex(value2), hex(model.check), value2 == model.check)
         failed = True
 
-    # Test 3: Test crc_clmul when len > 128
-    value3 = crc_clmul(params, params.init, test_data)
+    # Test 3: Test crc_calc when len > 128
+    value3 = crc_calc(params, params.init, test_data)
     value4 = crc_table(params, params.init, test_data)
 
     if value3 != value4:
@@ -31,9 +31,9 @@ for name, model in models.items():
         print("clmul:", hex(value3), hex(value4), value3 == value4)
         failed = True
 
-    # Test 4: Test crc_clmul in chunks
-    value5 = crc_clmul(params, params.init, test_data[:150])
-    value5 = crc_clmul(params, value5, test_data[150:])
+    # Test 4: Test crc_calc in chunks
+    value5 = crc_calc(params, params.init, test_data[:150])
+    value5 = crc_calc(params, value5, test_data[150:])
 
     if value5 != value4:
         print(name)

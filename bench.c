@@ -40,7 +40,7 @@ void bench(uint64_t n, uint64_t len) {
     start = clock();
 
     for(uint32_t i = 0; i < n; i++) {
-        crc_clmul(&params, params.init, buf, len);
+        crc_calc(&params, params.init, buf, len);
     }
 
     end = clock();
@@ -55,7 +55,7 @@ void bench(uint64_t n, uint64_t len) {
     start = clock();
 
     for(uint32_t i = 0; i < n; i++) {
-        crc_clmul(&params, params.init, buf, len);
+        crc_calc(&params, params.init, buf, len);
     }
 
     end = clock();

@@ -1,5 +1,4 @@
 # Taken from Greg Cook's CRC catalogue: https://reveng.sourceforge.io/crc-catalogue/all.htm
-# Only used for the test
 
 from collections import namedtuple
 

@@ -6,7 +6,7 @@ The algorithm is based on the Intel paper "Fast CRC Computation for Generic Poly
 
 ### Installation
 
-GCC expects the library to be compiled with the `-mssse3` and `-mpclmul` flags.
+For x86, GCC expects the library to be compiled with the `-mssse3` and `-mpclmul` flags.
 
 ### Benchmark
 

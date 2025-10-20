@@ -70,3 +70,19 @@ jobs:
             gcc -shared crc.o -o test/crc.so
     - name: Run test
       run: python test/test.py
+
+  no_simd:
+    name: Test without SIMD
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v5
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: "3.14"
+    - name: Compile library
+      run: |
+            gcc -DDISABLE_SIMD -c -mssse3 -mpclmul -fPIC -O3 crc.c
+            gcc -shared crc.o -o test/crc.so
+    - name: Run test
+      run: python test/test.py

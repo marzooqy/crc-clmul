@@ -1,5 +1,8 @@
 #include "crc.h"
+
+#ifndef DISABLE_SIMD
 #include "intrinsics.h"
+#endif
 
 /*
 //Debug code
@@ -35,7 +38,7 @@ static uint64_t reflect(uint64_t x, uint8_t w) {
 
 /* Computes x^n mod p. This is similar to the regular CRC calculation but we have
    to stop earlier, as the data isn't multiplied by x^w like in CRC. Assumes that
-   the polynomial has been scaled to 64-bits.*/
+   the polynomial has been scaled to 64-bits, and that n is larger than 64.*/
 static uint64_t xnmodp(params_t* params, uint16_t n) {
     uint64_t mod = params->poly;
 
@@ -75,7 +78,59 @@ static void crc_build_table(params_t *params) {
 }
 
 /* Returns a params_t struct with the specified parameters.
-   The table and other constants are computed as well. */
+   The table and other constants are computed as well.
+
+   Most of the parameters are due to translating the algorithm from hardware to software.
+
+   width is the width of the polynomial.
+
+   poly is the divisor in the CRC algorithm.
+
+   When refin is false, poly is multiplied by x^(64 - w). In the non-reflected
+   table algorithm, this truncates any bits that are shifted out of the register
+   from the left. In the non-reflected SIMD algorithm, this converts any CRC to
+   64 bits (Intel paper p16), allowing us to use the same algorithm for all CRC
+   parameters without any adjustments. This has the additional benefit of using
+   the same alignment for both algorithms.
+
+   When refin is true, poly is reflected.
+
+   Polynomials have an implicit x^(w+1) term, which is typically not included in
+   code. The CRC could be computed without it, and CRC64 would require a larger
+   integer if it were used.
+
+   refin specifies if the incoming bytes should be reflected before being used
+   to compute the CRC. Alternatively we could "reflect the world" (Ross Williams
+   guide section 11). That is, we reflect the init, poly, and reverse the
+   algorithm.
+
+   refout specifies if result should be reflected at the end of the calculation.
+
+   init is the initial content of the register. It's XORed with the first few
+   incoming bits. pycrc labels it more clearly as xor_in.
+
+   xorout is XORed with the CRC at the end of the calculation.
+
+   k1 and k2 are the constants used to fold the buffer (Intel paper p12).
+
+   table holds the values for the byte-by-byte (or Sarwate) algorithm.
+   It's the result of computing the CRC for every possible input byte.*/
+
+/* The Intel paper offers three different solutions for maintaining
+   alignment in the reflected algorithm (Intel paper p18-20):
+
+   1- Shift to the left by 1 in each iteration. This requires an
+      additional instruction inside the parallel folding loop.
+
+   2- Do the left shift on k1 and k2 instead. This seems to cause the
+      constants to be 65-bits long in some cases, which is undesireable.
+
+   3- Use x^(n-1) mod p for computing k1 and k2. This method
+      appears to work and it is the simplest to implement.
+
+   This basically makes the CLMUL instruction compute the correct result
+   despite the fact that we are working in the reflected domain. */
+
 params_t crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, bool refout, uint64_t xorout) {
     params_t params;
     params.width = width;
@@ -92,21 +147,6 @@ params_t crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, boo
     params.init = (refout ? reflect(init, width) : init) ^ xorout;
 
     params.xorout = xorout;
-
-    /* The Intel paper offers three different solutions for maintaining
-       alignment in the reflected algorithm (Intel paper p18-20):
-
-       1- Shift to the left by 1 in each iteration. This requires an
-          additional instruction inside the parallel folding loop.
-
-       2- Do the left shift on the constants instead. This seems to cause the
-          constants to be 65-bits long in some cases, which is undesireable.
-
-       3- Use x^(n-1) mod p for computing the constants. This method
-          appears to work and it is the simplest to implement.
-
-       This basically makes the CLMUL instruction compute the correct result
-       despite the fact that we are working in the reflected domain. */
 
     //Reflected:     (x^(512+64-1) mod p)'
     //Non-reflected:  x^(512+64) mod p
@@ -163,14 +203,6 @@ static uint64_t crc_bytes(params_t *params, uint64_t crc, unsigned char const *b
     return crc;
 }
 
-/* Table-based implementation of CRC. */
-uint64_t crc_table(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len) {
-    crc = crc_initial(params, crc);
-    crc = crc_bytes(params, crc, buf, len);
-    crc = crc_final(params, crc);
-    return crc;
-}
-
 /* Hardware accelerated algorithm based on the version used in Chromium.
 
    The fold-by-4 method (Intel paper p11-12) is used to reduce the buffer to a smaller
@@ -185,9 +217,8 @@ uint64_t crc_table(params_t *params, uint64_t crc, unsigned char const *buf, uin
    It should be possible to extend this algorithm to use the 256 and 512 bit
    variants of CLMUL, using a similar approach to the one shown here.*/
 
-uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len) {
-    crc = crc_initial(params, crc);
-
+#ifndef DISABLE_SIMD
+static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len) {
     if(len >= 128) {
         uint128_t b1, b2, b3, b4;
 
@@ -331,5 +362,26 @@ uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uin
     }
 
     //Compute the remaining bytes and return the CRC.
-    return crc_final(params, crc_bytes(params, crc, buf, len));
+    return crc_bytes(params, crc, buf, len);
+}
+#endif
+
+/* Table-based implementation of CRC. */
+uint64_t crc_table(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len) {
+    crc = crc_initial(params, crc);
+    crc = crc_bytes(params, crc, buf, len);
+    return crc_final(params, crc);
+}
+
+/* SIMD implementation of CRC. */
+uint64_t crc_calc(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len) {
+    crc = crc_initial(params, crc);
+
+    #ifndef DISABLE_SIMD
+    crc = crc_clmul(params, crc, buf, len);
+    #else
+    crc = crc_bytes(params, crc, buf, len);
+    #endif
+
+    return crc_final(params, crc);
 }
