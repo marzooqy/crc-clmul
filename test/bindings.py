@@ -28,8 +28,8 @@ _crc.crc_params.restype = params_t
 _crc.crc_table.argtypes = [ctypes.POINTER(params_t), ctypes.c_uint64, ctypes.c_char_p, ctypes.c_uint64]
 _crc.crc_table.restype = ctypes.c_uint64
 
-_crc.crc_clmul.argtypes = [ctypes.POINTER(params_t), ctypes.c_uint64, ctypes.c_char_p, ctypes.c_uint64]
-_crc.crc_clmul.restype = ctypes.c_uint64
+_crc.crc_calc.argtypes = [ctypes.POINTER(params_t), ctypes.c_uint64, ctypes.c_char_p, ctypes.c_uint64]
+_crc.crc_calc.restype = ctypes.c_uint64
 
 def crc_params(width, poly, init, refin, refout, xorout, check=0):
     return _crc.crc_params(width, poly, init, refin, refout, xorout)
@@ -37,5 +37,5 @@ def crc_params(width, poly, init, refin, refout, xorout, check=0):
 def crc_table(params, crc, buf):
     return _crc.crc_table(ctypes.byref(params), crc, buf, len(buf))
 
-def crc_clmul(params, crc, buf):
-    return _crc.crc_clmul(ctypes.byref(params), crc, buf, len(buf))
+def crc_calc(params, crc, buf):
+    return _crc.crc_calc(ctypes.byref(params), crc, buf, len(buf))

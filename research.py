@@ -2,10 +2,10 @@
 # Python makes this task easier with arbitrary length integers
 
 # Everything is treated as a polynomial in the GF2 domain
-# The coefficients of each polynomial are the bits (1s and 0s) of the integer
+# The coefficients of the polynomial are the bits (1s and 0s) of the integer
 # Addition and subtraction are equivalent to an XOR
 # Multiplication by x^n is equivalent to a left shift by n
-# Division by x^n shifts to the right by n bits
+# Division by x^n is equivalent to a right shift by n
 # Multiplication and division of polynomials is carryless
 
 from dataclasses import dataclass
@@ -103,7 +103,7 @@ def ref_bytes(buf):
 # "Mathematical" CRC
 # CRC is defined as M * X^W mod P
 # M is the incoming data/message
-# X^W is intentionally added so that all of the bits of M would be applied to CRC
+# X^W is intentionally added so that all of the bits of M would be applied to the CRC
 # otherwise polynomial division would stop before reaching the last W bits of M
 # P is the polynomial including the often omitted X^(W + 1) term
 # This also applies the different CRC parameters to the result
@@ -193,6 +193,7 @@ def crc_clmul(model, buf):
         p = (1 << model.width) | model.poly
         p <<= (64 - model.width)
         init = model.init << (64 - model.width)
+
         k1 = mod(1 << (512 + 64), p)
         k2 = mod(1 << 512, p)
 

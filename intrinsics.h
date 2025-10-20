@@ -1,5 +1,8 @@
 /* Defines equivalent macros for both Intel and Arm intrinsics. */
 
+#ifndef INTRINSICS_H
+#define INTRINSICS_H
+
 static const unsigned char SWAP_TABLE[] = {15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
 
 #if defined(__x86_64__) || defined(_M_AMD64)
@@ -70,5 +73,7 @@ static const unsigned char SWAP_TABLE[] = {15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5
 
     //XOR two 64x2 vectors.
     #define XOR(a, b) veorq_u64(a, b)
+
+#endif
 
 #endif
