@@ -1,7 +1,7 @@
 #include "crc.h"
 
 #ifndef DISABLE_SIMD
-    #include "intrinsics.h"
+#include "intrinsics.h"
 #endif
 
 /*
