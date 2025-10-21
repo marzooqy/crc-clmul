@@ -217,8 +217,8 @@ static uint64_t crc_bytes(params_t *params, uint64_t crc, unsigned char const *b
    It should be possible to extend this algorithm to use the 256 and 512 bit
    variants of CLMUL, using a similar approach to the one shown here.*/
 
+#ifndef DISABLE_SIMD
 static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len) {
-    #ifndef DISABLE_SIMD
     if(len >= 128) {
         uint128_t b1, b2, b3, b4;
 
@@ -360,24 +360,28 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
         crc = crc_bytes(params, crc, (unsigned char*) &b3, 16);
         crc = crc_bytes(params, crc, (unsigned char*) &b4, 16);
     }
-    #endif
 
     //Compute the remaining bytes and return the CRC.
     return crc_bytes(params, crc, buf, len);
 }
+#endif
 
 /* Table-based implementation of CRC. */
 uint64_t crc_table(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len) {
     crc = crc_initial(params, crc);
     crc = crc_bytes(params, crc, buf, len);
-    crc = crc_final(params, crc);
-    return crc;
+    return crc_final(params, crc);
 }
 
 /* SIMD implementation of CRC. */
 uint64_t crc_calc(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len) {
     crc = crc_initial(params, crc);
+
+    #ifndef DISABLE_SIMD
     crc = crc_clmul(params, crc, buf, len);
-    crc = crc_final(params, crc);
-    return crc;
+    #else
+    crc = crc_bytes(params, crc, buf, len);
+    #endif
+
+    return crc_final(params, crc);
 }
