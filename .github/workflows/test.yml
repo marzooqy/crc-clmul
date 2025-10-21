@@ -7,8 +7,8 @@ on:
     branches: ["main"]
 
 jobs:
-  windows:
-    name: Test on Windows
+  windows_x86:
+    name: Test on Windows (x64)
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v5
@@ -19,6 +19,22 @@ jobs:
     - name: Compile library
       run: |
             gcc -c -mssse3 -mpclmul -fPIC -O3 crc.c
+            gcc -shared crc.o -o test/crc.dll
+    - name: Run test
+      run: python test/test.py
+
+  windows_arm:
+    name: Test on Windows (ARM64)
+    runs-on: windows-11-arm
+    steps:
+    - uses: actions/checkout@v5
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: "3.14"
+    - name: Compile library
+      run: |
+            gcc -c -fPIC -O3 crc.c
             gcc -shared crc.o -o test/crc.dll
     - name: Run test
       run: python test/test.py
@@ -55,8 +71,8 @@ jobs:
     - name: Run test
       run: python test/test.py
 
-  ubuntu:
-    name: Test on Ubuntu
+  ubuntu_x86:
+    name: Test on Ubuntu (x64)
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v5
@@ -67,6 +83,22 @@ jobs:
     - name: Compile library
       run: |
             gcc -c -mssse3 -mpclmul -fPIC -O3 crc.c
+            gcc -shared crc.o -o test/crc.so
+    - name: Run test
+      run: python test/test.py
+
+  ubuntu_arm:
+    name: Test on Ubuntu (ARM64)
+    runs-on: ubuntu-24.04-arm
+    steps:
+    - uses: actions/checkout@v5
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: "3.14"
+    - name: Compile library
+      run: |
+            gcc -c -march=armv8-a+aes -fPIC -O3 crc.c
             gcc -shared crc.o -o test/crc.so
     - name: Run test
       run: python test/test.py
@@ -82,7 +114,7 @@ jobs:
         python-version: "3.14"
     - name: Compile library
       run: |
-            gcc -DDISABLE_SIMD -c -mssse3 -mpclmul -fPIC -O3 crc.c
+            gcc -DDISABLE_SIMD -c -fPIC -O3 crc.c
             gcc -shared crc.o -o test/crc.so
     - name: Run test
       run: python test/test.py
