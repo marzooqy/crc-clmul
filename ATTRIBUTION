@@ -1,4 +1,4 @@
-The basic CRC code and table algorithm is loosely based on Mark Adler's crcany, which has the following license:
+crcany License:
 
 Copyright (C) 2014-2025 Mark Adler
 
@@ -23,7 +23,7 @@ madler@alumni.caltech.edu
 
 --------------------
 
-The hardware-accelerated algorithm is based on Chromium's CRC32 algorithm, which comes with the following license:
+Chromium License:
 
 Copyright 2015 The Chromium Authors
 
