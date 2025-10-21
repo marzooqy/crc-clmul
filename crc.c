@@ -223,10 +223,10 @@ static uint64_t crc_bytes(params_t *params, uint64_t crc, unsigned char const *b
    variants of CLMUL, using a similar approach to the one shown here.*/
 
 #ifndef CPU_NO_SIMD
-#if defined(__GNUC__) && !defined(CPU_NO_SIMD)
-    #if defined(__x86_64__)
+#ifdef __GNUC__
+    #ifdef __x86_64__
         __attribute__((target("ssse3,pclmul")))
-    #elif defined(__aarch64__)
+    #elif __aarch64__
         __attribute__((target("+aes")))
     #endif
 #endif
@@ -397,8 +397,6 @@ uint64_t crc_calc(params_t *params, uint64_t crc, unsigned char const *buf, uint
     bool enable_simd = x86_cpu_enable_simd;
     #elif __aarch64__
     bool enable_simd = arm_cpu_enable_pmull;
-    #else
-    #error Not X86-64 or AArch64
     #endif
 
     crc = crc_initial(params, crc);

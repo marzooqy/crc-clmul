@@ -9,23 +9,25 @@
 
 #ifndef CPU_NO_SIMD
 
-#if defined(__x86_64__)
-    #if defined(OS_WINDOWS)
+#ifdef __x86_64__
+    #ifdef _WIN32
         #define X86_WINDOWS
     #else
         #define X86_NOT_WINDOWS
     #endif
-#elif defined(__aarch64__)
-    #if defined(OS_WINDOWS)
+#elif __aarch64__
+    #ifdef _WIN32
         #define ARMV8_OS_WINDOWS
-    #elif defined(OS_MAC)
-        #define ARMV8_OS_MACOS
-    #elif defined(OS_LINUX)
+    #elif __linux__
         #define ARMV8_OS_LINUX
-    #elif defined(OS_ANDROID)
+    #elif __ANDROID__
         #define ARMV8_OS_ANDROID
-    #elif defined(OS_IOS)
-        #define ARMV8_OS_IOS
+    #elif __APPLE__
+        #if TARGET_OS_IPHONE
+            #define ARMV8_OS_IOS
+        #elif TARGET_OS_MAC
+            #define ARMV8_OS_MACOS
+        #endif
     #endif
 #endif
 
