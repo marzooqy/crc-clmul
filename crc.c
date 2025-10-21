@@ -1,6 +1,7 @@
 #include "crc.h"
+#include "cpu_features.h"
 
-#ifndef DISABLE_SIMD
+#ifndef CPU_NO_SIMD
 #include "intrinsics.h"
 #endif
 
@@ -132,6 +133,10 @@ static void crc_build_table(params_t *params) {
    despite the fact that we are working in the reflected domain. */
 
 params_t crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, bool refout, uint64_t xorout) {
+    #ifndef CPU_NO_SIMD
+    cpu_check_features();
+    #endif
+
     params_t params;
     params.width = width;
 
@@ -217,7 +222,15 @@ static uint64_t crc_bytes(params_t *params, uint64_t crc, unsigned char const *b
    It should be possible to extend this algorithm to use the 256 and 512 bit
    variants of CLMUL, using a similar approach to the one shown here.*/
 
-#ifndef DISABLE_SIMD
+#ifndef CPU_NO_SIMD
+#if defined(__GNUC__) && !defined(CPU_NO_SIMD)
+    #if defined(__x86_64__)
+        __attribute__((target("ssse3,pclmul")))
+    #elif defined(__aarch64__)
+        __attribute__((target("+aes")))
+    #endif
+#endif
+
 static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len) {
     if(len >= 128) {
         uint128_t b1, b2, b3, b4;
@@ -364,6 +377,7 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
     //Compute the remaining bytes and return the CRC.
     return crc_bytes(params, crc, buf, len);
 }
+
 #endif
 
 /* Table-based implementation of CRC. */
@@ -375,13 +389,27 @@ uint64_t crc_table(params_t *params, uint64_t crc, unsigned char const *buf, uin
 
 /* SIMD implementation of CRC. */
 uint64_t crc_calc(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len) {
-    crc = crc_initial(params, crc);
-
-    #ifndef DISABLE_SIMD
-    crc = crc_clmul(params, crc, buf, len);
+    #ifdef CPU_NO_SIMD
+    return crc_table(params, crc, buf, len);
     #else
-    crc = crc_bytes(params, crc, buf, len);
+
+    #ifdef __x86_64__
+    bool enable_simd = x86_cpu_enable_simd;
+    #elif __aarch64__
+    bool enable_simd = arm_cpu_enable_pmull;
+    #else
+    #error Not X86-64 or AArch64
     #endif
 
+    crc = crc_initial(params, crc);
+
+    if(enable_simd) {
+        crc = crc_clmul(params, crc, buf, len);
+    } else {
+        crc = crc_bytes(params, crc, buf, len);
+    }
+
     return crc_final(params, crc);
+
+    #endif
 }

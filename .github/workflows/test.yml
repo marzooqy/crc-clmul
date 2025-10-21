@@ -7,28 +7,15 @@ on:
     branches: ["main"]
 
 jobs:
-  windows_x86_msvc:
-    name: Test on Windows with MSVC (x64)
-    runs-on: windows-latest
-    steps:
-    - uses: actions/checkout@v5
-    - uses: ilammy/msvc-dev-cmd@v1
-    - name: Compile library
-      run: |
-            cl /LD /O2 crc.c
-            move crc.dll test/crc.dll
-    - name: Run test
-      run: python test/test.py
-
-  windows_x86_mingw:
-    name: Test on Windows with MinGW (x64)
+  windows_x86:
+    name: Test on Windows (x64)
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v5
     - name: Compile library
       run: |
-            gcc -c -mssse3 -mpclmul -fPIC -O3 crc.c
-            gcc -shared crc.o -o test/crc.dll
+            gcc -c -DX86_WINDOWS -mssse3 -mpclmul -fPIC -O3 crc.c cpu_features.c
+            gcc -shared crc.o cpu_features.o -o test/crc.dll
     - name: Run test
       run: python test/test.py
 
@@ -39,8 +26,8 @@ jobs:
     - uses: actions/checkout@v5
     - name: Compile library
       run: |
-            gcc -c -mssse3 -mpclmul -fPIC -O3 crc.c
-            gcc -dynamiclib crc.o -o test/crc.dylib
+            gcc -c -DX86_NOT_WINDOWS -mssse3 -mpclmul -fPIC -O3 crc.c cpu_features.c
+            gcc -dynamiclib crc.o cpu_features.o -o test/crc.dylib
     - name: Run test
       run: python test/test.py
 
@@ -51,8 +38,8 @@ jobs:
     - uses: actions/checkout@v5
     - name: Compile library
       run: |
-            gcc -c -mssse3 -mpclmul -fPIC -O3 crc.c
-            gcc -shared crc.o -o test/crc.so
+            gcc -c -DX86_NOT_WINDOWS -mssse3 -mpclmul -fPIC -O3 crc.c cpu_features.c
+            gcc -shared crc.o cpu_features.o -o test/crc.so
     - name: Run test
       run: python test/test.py
 
@@ -63,8 +50,8 @@ jobs:
     - uses: actions/checkout@v5
     - name: Compile library
       run: |
-            gcc -c -fPIC -O3 crc.c
-            gcc -dynamiclib crc.o -o test/crc.dylib
+            gcc -c -DARMV8_OS_MACOS -fPIC -O3 crc.c cpu_features.c
+            gcc -dynamiclib crc.o cpu_features.o -o test/crc.dylib
     - name: Run test
       run: python test/test.py
 
@@ -75,8 +62,8 @@ jobs:
     - uses: actions/checkout@v5
     - name: Compile library
       run: |
-            gcc -c -march=armv8-a+aes -fPIC -O3 crc.c
-            gcc -shared crc.o -o test/crc.so
+            gcc -c -DARMV8_OS_LINUX -march=armv8-a+aes -fPIC -O3 crc.c cpu_features.c
+            gcc -shared crc.o cpu_features.o -o test/crc.so
     - name: Run test
       run: python test/test.py
 
@@ -87,7 +74,7 @@ jobs:
     - uses: actions/checkout@v5
     - name: Compile library
       run: |
-            gcc -DDISABLE_SIMD -c -fPIC -O3 crc.c
-            gcc -shared crc.o -o test/crc.so
+            gcc -DCPU_NO_SIMD -c -fPIC -O3 crc.c cpu_features.c
+            gcc -shared crc.o cpu_features.o -o test/crc.so
     - name: Run test
       run: python test/test.py
