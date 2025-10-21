@@ -9,7 +9,7 @@ The algorithm is based on the Intel paper "Fast CRC Computation for Generic Poly
 The library uses Chromium's zlib `cpu_features` to check the availability of SIMD at runtime, which requires a macro defining the target OS and architecture:
 
 | Operating System | Define |
-| --- | --- |
+| --- | :-: |
 | Windows x64 | X86_WINDOWS |
 | Mac x64 | X86_NOT_WINDOWS |
 | Linux x64 | X86_NOT_WINDOWS |

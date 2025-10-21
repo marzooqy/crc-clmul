@@ -10,7 +10,7 @@
 #include <stdint.h>
 #if defined(_MSC_VER)
 #include <intrin.h>
-#else
+#elif defined(__x86_64__)
 #include <cpuid.h>
 #endif
 
