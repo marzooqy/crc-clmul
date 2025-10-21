@@ -7,6 +7,30 @@
 
 #include "cpu_features.h"
 
+#ifndef CPU_NO_SIMD
+
+#if defined(__x86_64__)
+    #if defined(OS_WINDOWS)
+        #define X86_WINDOWS
+    #else
+        #define X86_NOT_WINDOWS
+    #endif
+#elif defined(__aarch64__)
+    #if defined(OS_WINDOWS)
+        #define ARMV8_OS_WINDOWS
+    #elif defined(OS_MAC)
+        #define ARMV8_OS_MACOS
+    #elif defined(OS_LINUX)
+        #define ARMV8_OS_LINUX
+    #elif defined(OS_ANDROID)
+        #define ARMV8_OS_ANDROID
+    #elif defined(OS_IOS)
+        #define ARMV8_OS_IOS
+    #endif
+#endif
+
+#endif
+
 #include <stdint.h>
 #if defined(_MSC_VER)
 #include <intrin.h>
