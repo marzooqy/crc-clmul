@@ -71,7 +71,7 @@ jobs:
     - name: Run test
       run: python test/test.py
 
-  ubuntu:
+  no_simd:
     name: Test without SIMD
     runs-on: ubuntu-latest
     steps:
