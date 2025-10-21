@@ -69,7 +69,7 @@ static const unsigned char SWAP_TABLE[] = {15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5
                                                             vgetq_lane_p64(vreinterpretq_p64_u64(b), 0)))
 
     //Swap the endianess of a 64x2 vector.
-    #define SWAP(x, tbl) vreinterpretq_u64_u8(vqtbl1q_u8(x, tbl))
+    #define SWAP(x, tbl) vreinterpretq_u64_u8(vqtbl1q_u8(vreinterpretq_u8_u64(x), tbl))
 
     //XOR two 64x2 vectors.
     #define XOR(a, b) veorq_u64(a, b)

@@ -82,7 +82,7 @@ jobs:
         python-version: "3.14"
     - name: Compile library
       run: |
-            gcc -c -fPIC -O3 crc.c
+            gcc -c -mssse3 -mpclmul -fPIC -O3 crc.c
             gcc -shared crc.o -o test/crc.so
     - name: Run test
       run: python test/test.py
@@ -98,7 +98,7 @@ jobs:
         python-version: "3.14"
     - name: Compile library
       run: |
-            gcc -c -mssse3 -mpclmul -fPIC -O3 crc.c
+            gcc -c -march=armv8-a+aes -fPIC -O3 crc.c
             gcc -shared crc.o -o test/crc.so
     - name: Run test
       run: python test/test.py
