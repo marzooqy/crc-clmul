@@ -62,7 +62,7 @@ jobs:
     - uses: actions/checkout@v5
     - name: Compile library
       run: |
-            gcc -c -DOS_LINUX -march=armv8-a+aes -fPIC -O3 crc.c cpu_features.c
+            gcc -c -DOS_LINUX -fPIC -O3 crc.c cpu_features.c
             gcc -shared crc.o cpu_features.o -o test/crc.so
     - name: Run test
       run: python test/test.py
