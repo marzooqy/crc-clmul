@@ -21,12 +21,14 @@ typedef struct {
    Calculate the values of k1, k2, and the table. */
 params_t crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, bool refout, uint64_t xorout);
 
-/* Calculate a CRC using the table-based algorithm.
-   Use params.init as the initial CRC value.*/
-uint64_t crc_table(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len);
-
 /* Calculate CRC using the SIMD algorithm. Uses the table-based algorithm if
    SIMD intrinsics are not available. Use params.init as the initial CRC value.*/
 uint64_t crc_calc(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len);
+
+#ifdef DEBUG
+/* Calculate a CRC using the table-based algorithm.
+   Use params.init as the initial CRC value.*/
+uint64_t crc_table(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len);
+#endif
 
 #endif
