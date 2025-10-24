@@ -13,6 +13,7 @@ static void print_hex64(uint64_t n) {
     printf("0x%llx\n", n);
 }
 
+#ifndef CPU_NO_SIMD
 // Prints the value of a 128-bit register in hexadecimal form.
 static void print_hex128(uint128_t n) {
     unsigned char* c = (unsigned char*) &n;
@@ -22,6 +23,7 @@ static void print_hex128(uint128_t n) {
     }
     printf("\n");
 }
+#endif
 #endif
 
 /* Reflects an integer x of width w */
