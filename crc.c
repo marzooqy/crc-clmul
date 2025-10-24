@@ -1,13 +1,11 @@
-#include "crc.h"
 #include "cpu_features.h"
+#include "crc.h"
 
 #ifndef CPU_NO_SIMD
 #include "intrinsics.h"
 #endif
 
-/*
-//Debug code
-
+#ifdef DEBUG
 #include <stdio.h>
 
 // Prints a 64-bit integer in hexadecimal form.
@@ -24,7 +22,7 @@ static void print_hex128(uint128_t n) {
     }
     printf("\n");
 }
-*/
+#endif
 
 /* Reflects an integer x of width w */
 static uint64_t reflect(uint64_t x, uint8_t w) {
@@ -223,11 +221,11 @@ static uint64_t crc_bytes(params_t *params, uint64_t crc, unsigned char const *b
    variants of CLMUL, using a similar approach to the one shown here.*/
 
 #ifndef CPU_NO_SIMD
-    #ifdef __x86_64__
-        __attribute__((target("ssse3,pclmul")))
-    #elif __aarch64__
-        __attribute__((target("+aes")))
-    #endif
+#ifdef __x86_64__
+    __attribute__((target("ssse3,pclmul")))
+#elif __aarch64__
+    __attribute__((target("+aes")))
+#endif
 static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len) {
     if(len >= 128) {
         uint128_t b1, b2, b3, b4;
