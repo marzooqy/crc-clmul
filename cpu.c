@@ -5,7 +5,7 @@
  * found in the Chromium source repository LICENSE file.
  */
 
-#include "cpu_features.h"
+#include "cpu.h"
 
 #ifndef CPU_NO_SIMD
 
