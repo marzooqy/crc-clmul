@@ -224,9 +224,9 @@ static uint64_t crc_bytes(params_t *params, uint64_t crc, unsigned char const *b
 
 #ifndef CPU_NO_SIMD
 #ifdef __x86_64__
-    __attribute__((target("ssse3,pclmul")))
+__attribute__((target("ssse3,pclmul")))
 #elif __aarch64__
-    __attribute__((target("+aes")))
+__attribute__((target("+aes")))
 #endif
 static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len) {
     if(len >= 128) {
