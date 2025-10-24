@@ -1,4 +1,4 @@
-#include "cpu_features.h"
+#include "cpu.h"
 #include "crc.h"
 
 #ifndef CPU_NO_SIMD
