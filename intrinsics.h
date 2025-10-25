@@ -3,7 +3,7 @@
 #ifndef INTRINSICS_H
 #define INTRINSICS_H
 
-static const unsigned char SWAP_TABLE[] = {15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
+const unsigned char SWAP_TABLE[] = {15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
 
 #ifdef __x86_64__
 
