@@ -1,7 +1,7 @@
-#include "cpu.h"
 #include "crc.h"
 
 #ifndef CPU_NO_SIMD
+#include "cpu.h"
 #include "intrinsics.h"
 #endif
 
