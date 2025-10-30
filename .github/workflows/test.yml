@@ -7,8 +7,21 @@ on:
     branches: ["main"]
 
 jobs:
-  windows_x86:
-    name: Test on Windows (x64)
+  windows_x86_msvc:
+    name: Test on Windows with MSVC (x64)
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v5
+    - uses: ilammy/msvc-dev-cmd@v1
+    - name: Compile library
+      run: |
+            cl /DDEBUG /LD /O2 crc.c cpu.c
+            move crc.dll test/crc.dll
+    - name: Run test
+      run: python test/test.py
+
+  windows_x86_gcc:
+    name: Test on Windows with MinGW (x64)
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v5

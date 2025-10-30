@@ -9,13 +9,13 @@
 
 #ifndef CPU_NO_SIMD
 
-#ifdef __x86_64__
+#if defined(__x86_64__) || defined(_M_AMD64)
     #ifdef _WIN32
         #define X86_WINDOWS
     #else
         #define X86_NOT_WINDOWS
     #endif
-#elif __aarch64__
+#elif defined(__aarch64__)
     #ifdef _WIN32
         #define ARMV8_OS_WINDOWS
     #elif __linux__

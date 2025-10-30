@@ -5,7 +5,7 @@
 
 const unsigned char SWAP_TABLE[] = {15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
 
-#ifdef __x86_64__
+#if defined(__x86_64__) || defined(_M_AMD64)
 
 /* Just to clear my confusion around the selection/control bits of the PCLMULQDQ
    instruction. 1 picks out the 64 MSBs and 0 picks the least 64. The high control
@@ -43,7 +43,7 @@ typedef __m128i table_t;
 //XOR two 128-bit integers.
 #define XOR(a, b) _mm_xor_si128(a, b)
 
-#elif __aarch64__
+#elif defined(__aarch64__)
 
 #include <arm_neon.h>
 

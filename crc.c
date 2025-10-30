@@ -117,8 +117,8 @@ static void crc_build_table(params_t *params) {
    table holds the values for the byte-by-byte (or Sarwate) algorithm.
    It's the result of computing the CRC for every possible input byte.*/
 
-/* The Intel paper offers three different solutions for maintaining
-   alignment in the reflected algorithm (Intel paper p18-20):
+/* For using CLMUL in the reflected domain, the Intel paper offers three
+   different solutions (Intel paper p18-20):
 
    1- Shift to the left by 1 in each iteration. This requires an
       additional instruction inside the parallel folding loop.
@@ -223,10 +223,12 @@ static uint64_t crc_bytes(params_t *params, uint64_t crc, unsigned char const *b
    variants of CLMUL, using a similar approach to the one shown here.*/
 
 #ifndef CPU_NO_SIMD
+#ifdef  __GNUC__
 #ifdef __x86_64__
 __attribute__((target("ssse3,pclmul")))
 #elif __aarch64__
 __attribute__((target("+aes")))
+#endif
 #endif
 static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len) {
     if(len >= 128) {
@@ -390,9 +392,9 @@ uint64_t crc_calc(params_t *params, uint64_t crc, unsigned char const *buf, uint
     crc = crc_initial(params, crc);
 
     #ifndef CPU_NO_SIMD
-    #ifdef __x86_64__
+    #if defined(__x86_64__) || defined(_M_AMD64)
     bool enable_simd = x86_cpu_enable_simd;
-    #elif __aarch64__
+    #elif defined(__aarch64__)
     bool enable_simd = arm_cpu_enable_pmull;
     #endif
 
