@@ -394,7 +394,7 @@ uint64_t crc_calc(params_t *params, uint64_t crc, unsigned char const *buf, uint
     #ifndef CPU_NO_SIMD
     #if defined(__x86_64__) || defined(_M_AMD64)
     bool enable_simd = x86_cpu_enable_simd;
-    #elif defined(__aarch64__)
+    #elif defined(__aarch64__) || defined(_M_ARM64)
     bool enable_simd = arm_cpu_enable_pmull;
     #endif
 

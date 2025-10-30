@@ -2,9 +2,9 @@ name: Test
 
 on:
   push:
-    branches: ["main"]
+    branches: ["**"]
   pull_request:
-    branches: ["main"]
+    branches: ["**"]
 
 jobs:
   windows_x86_msvc:
@@ -53,6 +53,21 @@ jobs:
       run: |
             gcc -c -DDEBUG -fPIC -O3 crc.c cpu.c
             gcc -shared crc.o cpu.o -o test/crc.so
+    - name: Run test
+      run: python test/test.py
+
+  windows_arm:
+    name: Test on Windows with MSVC (ARM64)
+    runs-on: windows-11-arm
+    steps:
+    - uses: actions/checkout@v5
+    - uses: ilammy/msvc-dev-cmd@v1
+      with:
+        arch: arm64
+    - name: Compile library
+      run: |
+            cl /DDEBUG /LD /O2 crc.c cpu.c
+            move crc.dll test/crc.dll
     - name: Run test
       run: python test/test.py
 

@@ -15,7 +15,7 @@
     #else
         #define X86_NOT_WINDOWS
     #endif
-#elif defined(__aarch64__)
+#elif defined(__aarch64__) || defined(_M_ARM64)
     #ifdef _WIN32
         #define ARMV8_OS_WINDOWS
     #elif __linux__
@@ -122,7 +122,7 @@ void cpu_check_features(void)
 }
 #endif
 
-#if (defined(__ARM_NEON__) || defined(__ARM_NEON))
+#if defined(__aarch64__) || defined(_M_ARM64)
 #if !defined(ARMV8_OS_MACOS)
 /*
  * See http://bit.ly/2CcoEsr for run-time detection of ARM features and also

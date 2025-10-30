@@ -43,7 +43,7 @@ typedef __m128i table_t;
 //XOR two 128-bit integers.
 #define XOR(a, b) _mm_xor_si128(a, b)
 
-#elif defined(__aarch64__)
+#elif defined(__aarch64__) || defined(_M_ARM64)
 
 #include <arm_neon.h>
 
@@ -59,14 +59,19 @@ typedef uint8x16_t table_t;
 //Load 16 bytes from ptr into a 64x2 vector.
 #define LOAD(ptr) vld1q_u64((const uint64_t*)(ptr))
 
-//Multiply the high lane of two 64x2 vectors.
+//Multiply the high lanes of two 64x2 vectors.
 #define CLMUL_HI(a, b) vreinterpretq_u64_p128(vmull_high_p64(vreinterpretq_p64_u64(a), \
                                                              vreinterpretq_p64_u64(b)))
 
-//Multiply the low lane of two 64x2 vectors.
+//Multiply the low lanes of two 64x2 vectors.
 //It gets ugly.
+#ifndef _MSC_VER
 #define CLMUL_LO(a, b) vreinterpretq_u64_p128(vmull_p64(vgetq_lane_p64(vreinterpretq_p64_u64(a), 0), \
                                                         vgetq_lane_p64(vreinterpretq_p64_u64(b), 0)))
+#else
+#define CLMUL_LO(a, b) vreinterpretq_u64_p128(vmull_p64(vreinterpret_p64_u64(vget_low_u64(a)), \
+                                                        vreinterpret_p64_u64(vget_low_u64(b))))
+#endif
 
 //Swap the endianess of a 64x2 vector.
 #define SWAP(x, tbl) vreinterpretq_u64_u8(vqtbl1q_u8(vreinterpretq_u8_u64(x), tbl))
