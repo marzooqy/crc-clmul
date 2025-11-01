@@ -378,14 +378,12 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
 }
 #endif
 
-#ifdef DEBUG
 /* Table-based implementation of CRC. */
 uint64_t crc_table(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len) {
     crc = crc_initial(params, crc);
     crc = crc_bytes(params, crc, buf, len);
     return crc_final(params, crc);
 }
-#endif
 
 /* SIMD implementation of CRC. */
 uint64_t crc_calc(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len) {

@@ -15,7 +15,7 @@ jobs:
     - uses: ilammy/msvc-dev-cmd@v1
     - name: Compile library
       run: |
-            cl /DDEBUG /LD /O2 crc.c cpu.c
+            cl /LD /O2 crc.c cpu.c
             move crc.dll test/crc.dll
     - name: Run test
       run: python test/test.py
@@ -27,7 +27,7 @@ jobs:
     - uses: actions/checkout@v5
     - name: Compile library
       run: |
-            gcc -c -DDEBUG -fPIC -O3 crc.c cpu.c
+            gcc -c -fPIC -O3 crc.c cpu.c
             gcc -shared crc.o cpu.o -o test/crc.dll
     - name: Run test
       run: python test/test.py
@@ -39,7 +39,7 @@ jobs:
     - uses: actions/checkout@v5
     - name: Compile library
       run: |
-            gcc -c -DDEBUG -fPIC -O3 crc.c cpu.c
+            gcc -c -fPIC -O3 crc.c cpu.c
             gcc -dynamiclib crc.o cpu.o -o test/crc.dylib
     - name: Run test
       run: python test/test.py
@@ -51,7 +51,7 @@ jobs:
     - uses: actions/checkout@v5
     - name: Compile library
       run: |
-            gcc -c -DDEBUG -fPIC -O3 crc.c cpu.c
+            gcc -c -fPIC -O3 crc.c cpu.c
             gcc -shared crc.o cpu.o -o test/crc.so
     - name: Run test
       run: python test/test.py
@@ -66,7 +66,7 @@ jobs:
         arch: arm64
     - name: Compile library
       run: |
-            cl /DDEBUG /LD /O2 crc.c cpu.c
+            cl /LD /O2 crc.c cpu.c
             move crc.dll test/crc.dll
     - name: Run test
       run: python test/test.py
@@ -78,7 +78,7 @@ jobs:
     - uses: actions/checkout@v5
     - name: Compile library
       run: |
-            gcc -c -DDEBUG -fPIC -O3 crc.c cpu.c
+            gcc -c -fPIC -O3 crc.c cpu.c
             gcc -dynamiclib crc.o cpu.o -o test/crc.dylib
     - name: Run test
       run: python test/test.py
@@ -90,7 +90,7 @@ jobs:
     - uses: actions/checkout@v5
     - name: Compile library
       run: |
-            gcc -c -DDEBUG -fPIC -O3 crc.c cpu.c
+            gcc -c -fPIC -O3 crc.c cpu.c
             gcc -shared crc.o cpu.o -o test/crc.so
     - name: Run test
       run: python test/test.py
@@ -102,7 +102,7 @@ jobs:
     - uses: actions/checkout@v5
     - name: Compile library
       run: |
-            gcc -c -DCPU_NO_SIMD -DDEBUG -fPIC -O3 crc.c
+            gcc -c -DCPU_NO_SIMD -fPIC -O3 crc.c
             gcc -shared crc.o -o test/crc.so
     - name: Run test
       run: python test/test.py
