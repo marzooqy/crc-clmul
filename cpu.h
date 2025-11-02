@@ -5,16 +5,12 @@
  * found in the Chromium source repository LICENSE file.
  */
 
-/* TODO(cavalcantii): remove checks for x86_flags on deflate.
- */
-extern int arm_cpu_enable_crc32;
-extern int arm_cpu_enable_pmull;
-extern int x86_cpu_enable_sse2;
-extern int x86_cpu_enable_ssse3;
-extern int x86_cpu_enable_simd;
-extern int x86_cpu_enable_avx512;
+#ifndef CPU_FEATURES_H
+#define CPU_FEATURES_H
 
-extern int riscv_cpu_enable_rvv;
-extern int riscv_cpu_enable_vclmul;
+#include <stdbool.h>
 
-void cpu_check_features(void);
+extern bool cpu_enable_simd;
+void cpu_check_features();
+
+#endif

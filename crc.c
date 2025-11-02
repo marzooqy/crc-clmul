@@ -1,9 +1,11 @@
 #include "crc.h"
+#include "cpu.h"
 
 #ifndef CPU_NO_SIMD
-#include "cpu.h"
 #include "intrinsics.h"
 #endif
+
+#include <assert.h>
 
 #ifdef DEBUG
 #include <stdio.h>
@@ -105,7 +107,7 @@ static void crc_build_table(params_t *params) {
    guide section 11). That is, we reflect the init, poly, and reverse the
    algorithm.
 
-   refout specifies if result should be reflected at the end of the calculation.
+   refout specifies if the result should be reflected at the end of the calculation.
 
    init is the initial content of the register. It's XORed with the first few
    incoming bits. pycrc labels it more clearly as xor_in.
@@ -153,6 +155,7 @@ params_t crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, boo
 
     params.xorout = xorout;
 
+    #ifndef CPU_NO_SIMD
     //Reflected:     (x^(512+64-1) mod p)'
     //Non-reflected:  x^(512+64) mod p
     params.k1 = refin ? xnmodp(&params, 575) : xnmodp(&params, 576);
@@ -160,6 +163,7 @@ params_t crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, boo
     //Reflected:     (x^(512-1) mod p)'
     //Non-reflected:  x^512 mod p
     params.k2 = refin ? xnmodp(&params, 511) : xnmodp(&params, 512);
+    #endif
 
     crc_build_table(&params);
 
@@ -230,7 +234,12 @@ __attribute__((target("ssse3,pclmul")))
 __attribute__((target("+aes")))
 #endif
 #endif
+#endif
 static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len) {
+    #ifdef CPU_NO_SIMD
+    //Crash if this branch runs
+    assert(0);
+    #else
     if(len >= 128) {
         uint128_t b1, b2, b3, b4;
 
@@ -375,8 +384,8 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
 
     //Compute the remaining bytes and return the CRC.
     return crc_bytes(params, crc, buf, len);
+    #endif
 }
-#endif
 
 /* Table-based implementation of CRC. */
 uint64_t crc_table(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len) {
@@ -389,22 +398,11 @@ uint64_t crc_table(params_t *params, uint64_t crc, unsigned char const *buf, uin
 uint64_t crc_calc(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len) {
     crc = crc_initial(params, crc);
 
-    #ifndef CPU_NO_SIMD
-    #if defined(__x86_64__) || defined(_M_AMD64)
-    bool enable_simd = x86_cpu_enable_simd;
-    #elif defined(__aarch64__) || defined(_M_ARM64)
-    bool enable_simd = arm_cpu_enable_pmull;
-    #endif
-
-    if(enable_simd) {
+    if(cpu_enable_simd) {
         crc = crc_clmul(params, crc, buf, len);
     } else {
         crc = crc_bytes(params, crc, buf, len);
     }
-
-    #else
-    crc = crc_bytes(params, crc, buf, len);
-    #endif
 
     return crc_final(params, crc);
 }
