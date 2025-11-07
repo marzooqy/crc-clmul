@@ -337,9 +337,19 @@ __attribute__((target("+aes")))
 #endif
 static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len) {
     #ifdef CPU_NO_SIMD
-    //Crash if this branch runs
+    //Crash if this branch runs.
     assert(0);
     #else
+
+    //Align to a 16 byte memory boundary.
+    uint64_t adrs = (uintptr_t)buf & 0xf;
+    if(adrs) {
+        uint64_t rem = 16 - adrs;
+        crc = crc_bytes(params, crc, buf, rem);
+        buf += rem;
+        len -= rem;
+    }
+
     if(len >= 128) {
         uint128_t b1, b2, b3, b4;
 

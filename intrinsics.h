@@ -29,7 +29,7 @@ typedef __m128i table_t;
 #define GET_SWAP_TABLE() _mm_loadu_si128((__m128i*)SWAP_TABLE)
 
 //Load 16 bytes from ptr into a 128-bit integer.
-#define LOAD(ptr) _mm_loadu_si128((__m128i*)(ptr))
+#define LOAD(ptr) _mm_load_si128((__m128i*)(ptr))
 
 //Multiply the high 64-bits of two 128-bit integers.
 #define CLMUL_HI(a, b) _mm_clmulepi64_si128(a, b, 0x11)
