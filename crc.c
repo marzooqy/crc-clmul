@@ -39,6 +39,124 @@ static uint64_t reflect(uint64_t x, uint8_t w) {
     return x >> (64 - w);
 }
 
+/* Applied before computing the CRC. Reverse the xorout from the last application.
+   Reflect the CRC if refin or refout are true. if refin is false then scale the
+   CRC by 64 - w just like the polynomial. */
+static uint64_t crc_initial(params_t *params, uint64_t crc) {
+    crc ^= params->xorout;
+    if(params->refin ^ params->refout) {
+        crc = reflect(crc, params->width);
+    }
+    if(!params->refin) {
+        crc <<= 64 - params->width;
+    }
+    return crc;
+}
+
+/* Applied after computing the CRC. If refin is false then scale back by 64 - w.
+   Reflect the CRC if refin or refout are true. XOR with xorout. */
+static uint64_t crc_final(params_t *params, uint64_t crc) {
+    if(!params->refin) {
+        crc >>= 64 - params->width;
+    }
+    if(params->refin ^ params->refout) {
+        crc = reflect(crc, params->width);
+    }
+    return crc ^ params->xorout;
+}
+
+//--------------------
+
+/* Code for combining two CRCs. Adapted from crcany, which comes with the
+   disclaimer below.*/
+
+/* crc.c -- Generic CRC calculations
+ * Copyright (C) 2014, 2016, 2017, 2020, 2021 Mark Adler
+ * For conditions of distribution and use, see copyright notice in crcany.c.
+ */
+
+/* Computes (a * b) mod p. */
+static uint64_t multmodp(params_t *params, uint64_t a, uint64_t b) {
+    uint64_t prod = 0;
+    if(params->refin) {
+        // Reflected polynomial.
+        const uint64_t top = (uint64_t)1 << (params->width - 1);
+        const uint64_t mask = top - 1;
+        while(true) {
+            if(a & top) {
+                prod ^= b;
+                if((a & mask) == 0) {
+                    break;
+                }
+            }
+            a <<= 1;
+            b = b & 1 ? (b >> 1) ^ params->poly : b >> 1;
+        }
+    }
+    else {
+        // Normal polynomial.
+        const uint64_t top = (uint64_t)1 << 63;
+        const uint64_t bottom = (uint64_t)1 << (64 - params->width);
+        const uint64_t mask = (top - 1) << (65 - params->width);
+        while(true) {
+            if(a & bottom) {
+                prod ^= b;
+                if((a & mask) == 0) {
+                    break;
+                }
+            }
+            a >>= 1;
+            b = b & top ? (b << 1) ^ params->poly : b << 1;
+        }
+    }
+    return prod;
+}
+
+/* Fills combine_table with values of x^2^i mod p. */
+static void crc_build_combine_table(params_t *params) {
+    uint64_t sq = params->refin ? (uint64_t)1 << (params->width - 2)
+                                : (uint64_t)1 << (65 - params->width); // x^1
+
+    params->combine_table[0] = sq;
+    for(uint8_t i = 1; i < 64; i++) {
+        sq = multmodp(params, sq, sq); // x^2^i
+        params->combine_table[i] = sq;
+    }
+}
+
+/* Multiplies the various x^2^i mod p factors from combine_table to get x^n mod p. */
+static uint64_t xnmodp_table(params_t *params, uint64_t n) {
+    uint64_t xp = params->refin ? (uint64_t)1 << (params->width - 1)
+                                : (uint64_t)1 << (64 - params->width); // x^0
+    uint8_t k = 0;
+    while(n) {
+        if(n & 1) {
+            xp = multmodp(params, params->combine_table[k], xp);
+        }
+        n >>= 1;
+        k++;
+    }
+    return xp;
+}
+
+/* Mark Adler's O(log n) combine algorithm. It's fairly efficient so SIMD intrinsics
+   might not be needed. */
+uint64_t crc_combine(params_t *params, uint64_t crc, uint64_t crc2, uint64_t len) {
+    /* It's not clear why we should XOR with the initial. It could be that we
+       are treating the CRC as the first incoming bits to the register. */
+    crc ^= params->init ^ params->xorout;
+    crc = crc_initial(params, crc);
+    crc2 = crc_initial(params, crc2);
+
+    crc = multmodp(params, xnmodp_table(params, len * 8), crc) ^ crc2;
+
+    return crc_final(params, crc);
+}
+
+//--------------------
+
+/* CRC calculation code */
+
 /* Computes x^n mod p. This is similar to the regular CRC calculation but we have
    to stop earlier, as the data isn't multiplied by x^w like in CRC. Assumes that
    the polynomial has been scaled to 64-bits, and that n is larger than 64.*/
@@ -50,7 +168,7 @@ static uint64_t xnmodp(params_t* params, uint16_t n) {
             mod = mod & 1 ? (mod >> 1) ^ params->poly : mod >> 1;
         }
     } else {
-        uint64_t mask = (uint64_t)1 << 63;
+        const uint64_t mask = (uint64_t)1 << 63;
         while(n-- > 64) {
             mod = mod & mask ? (mod << 1) ^ params->poly : mod << 1;
         }
@@ -70,7 +188,7 @@ static void crc_build_table(params_t *params) {
             }
         }
         else {
-            uint64_t mask = (uint64_t)1 << 63;
+            const uint64_t mask = (uint64_t)1 << 63;
             crc <<= 56;
             for(uint8_t j = 0; j < 8; j++) {
                 crc = crc & mask ? (crc << 1) ^ params->poly : crc << 1;
@@ -166,34 +284,9 @@ params_t crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, boo
     #endif
 
     crc_build_table(&params);
+    crc_build_combine_table(&params);
 
     return params;
-}
-
-/* Applied before computing the CRC. Reverse the xorout from the last application.
-   Reflect the CRC if refin or refout are true. if refin is false then scale the
-   CRC by 64 - w just like the polynomial. */
-static uint64_t crc_initial(params_t *params, uint64_t crc) {
-    crc ^= params->xorout;
-    if(params->refin ^ params->refout) {
-        crc = reflect(crc, params->width);
-    }
-    if(!params->refin) {
-        crc <<= 64 - params->width;
-    }
-    return crc;
-}
-
-/* Applied after computing the CRC. If refin is false then scale back by 64 - w.
-   Reflect the CRC if refin or refout are true. XOR with xorout. */
-static uint64_t crc_final(params_t *params, uint64_t crc) {
-    if(!params->refin) {
-        crc >>= 64 - params->width;
-    }
-    if(params->refin ^ params->refout) {
-        crc = reflect(crc, params->width);
-    }
-    return crc ^ params->xorout;
 }
 
 /* Compute the CRC byte-by-byte using the lookup table. */
@@ -210,6 +303,13 @@ static uint64_t crc_bytes(params_t *params, uint64_t crc, unsigned char const *b
     }
 
     return crc;
+}
+
+/* Table-based implementation of CRC. */
+uint64_t crc_table(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len) {
+    crc = crc_initial(params, crc);
+    crc = crc_bytes(params, crc, buf, len);
+    return crc_final(params, crc);
 }
 
 /* Hardware accelerated algorithm based on the version used in Chromium.
@@ -385,13 +485,6 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
     //Compute the remaining bytes and return the CRC.
     return crc_bytes(params, crc, buf, len);
     #endif
-}
-
-/* Table-based implementation of CRC. */
-uint64_t crc_table(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len) {
-    crc = crc_initial(params, crc);
-    crc = crc_bytes(params, crc, buf, len);
-    return crc_final(params, crc);
 }
 
 /* SIMD implementation of CRC. */

@@ -4,9 +4,7 @@ Much hardware acceleration effort is dedicated to CRC32 and CRC32C (and to a les
 
 The algorithm is based on the Intel paper "Fast CRC Computation for Generic Polynomials Using PCLMULQDQ Instruction". It takes into account both reflections and different polynomial widths.
 
-A 64-bit system is expected. GCC and Clang are supported. MSVC on x64 has limited support.
-
-A slow software version of the library can be used by defining `CPU_NO_SIMD`.
+A 64-bit system is expected. A slow software version of the library can be used by defining `CPU_NO_SIMD`.
 
 ### Benchmark
 
