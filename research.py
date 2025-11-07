@@ -247,15 +247,14 @@ def crc_clmul(model, buf):
 # Barret Reduction for 64-bits CRCs
 # This is strictly following the Intel paper
 def barret(model, value):
+    p = (1 << model.width) | model.poly
     if model.refin:
-        p = (1 << model.width) | model.poly
         pp = ref(p, model.width + 1)
-        u = ref(div(1 << 128, (1 << model.width) | model.poly), model.width + 1)
+        u = ref(div(1 << 128, p), model.width + 1)
         t1 = clmul(value & 0xffffffffffffffff, u)
         t2 = clmul(t1 & 0xffffffffffffffff, pp)
         return (value ^ t2) >> 64
     else:
-        p = (1 << model.width) | model.poly
         u = div(1 << 128, p)
         t1 = clmul(value >> 64, u)
         t2 = clmul(t1 >> 64, p)

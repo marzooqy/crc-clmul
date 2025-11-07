@@ -45,5 +45,12 @@ def crc_table(params, crc, buf):
 def crc_calc(params, crc, buf):
     return _crc.crc_calc(ctypes.byref(params), crc, buf, len(buf))
 
+def crc_calc_unaligned(params, crc, buf, shift):
+    pointer = ctypes.cast(buf, ctypes.POINTER(ctypes.c_char))
+    address = ctypes.addressof(pointer.contents)
+    pointer2 = ctypes.cast(address + shift, ctypes.POINTER(ctypes.c_char))
+
+    return _crc.crc_calc(ctypes.byref(params), crc, pointer2, len(buf) - shift)
+
 def crc_combine(params, crc, crc2, len):
     return _crc.crc_combine(ctypes.byref(params), crc, crc2, len)

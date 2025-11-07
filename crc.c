@@ -1,13 +1,12 @@
 #include "crc.h"
-#include "cpu.h"
 
 #ifndef CPU_NO_SIMD
+#include "cpu.h"
 #include "intrinsics.h"
 #endif
 
-#include <assert.h>
-
 #ifdef DEBUG
+#include <assert.h>
 #include <stdio.h>
 
 // Prints a 64-bit integer in hexadecimal form.
@@ -319,9 +318,9 @@ uint64_t crc_table(params_t *params, uint64_t crc, unsigned char const *buf, uin
    Since the new buffer is congruent, we could just use the table-based algorithm
    on the new buffer to find the CRC. This allows us to skip much of the paper.
 
-   This doesn't affect performance much, as the table-wise algorithm is used
-   for < 192 bytes. It would be noticably slower if the input data buffer is
-   small, but in that case the speed of the table algorithm is enough.
+   This doesn't affect performance much, as the table-wise algorithm is used for
+   around or less than 200 bytes. It would be noticably slower if the input data
+   buffer is small, but in that case the speed of the table algorithm is enough.
 
    It should be possible to extend this algorithm to use the 256 and 512 bit
    variants of CLMUL, using a similar approach to the one shown here.*/
@@ -334,13 +333,7 @@ __attribute__((target("ssse3,pclmul")))
 __attribute__((target("+aes")))
 #endif
 #endif
-#endif
 static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len) {
-    #ifdef CPU_NO_SIMD
-    //Crash if this branch runs.
-    assert(0);
-    #else
-
     //Align to a 16 byte memory boundary.
     uint64_t adrs = (uintptr_t)buf & 0xf;
     if(adrs) {
@@ -349,6 +342,10 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
         buf += rem;
         len -= rem;
     }
+
+    #ifdef DEBUG
+    assert(((uintptr_t)buf & 0xf) == 0);
+    #endif
 
     if(len >= 128) {
         uint128_t b1, b2, b3, b4;
@@ -494,18 +491,23 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
 
     //Compute the remaining bytes and return the CRC.
     return crc_bytes(params, crc, buf, len);
-    #endif
 }
+#endif
 
 /* SIMD implementation of CRC. */
 uint64_t crc_calc(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len) {
     crc = crc_initial(params, crc);
 
+    #ifndef CPU_NO_SIMD
     if(cpu_enable_simd) {
         crc = crc_clmul(params, crc, buf, len);
     } else {
         crc = crc_bytes(params, crc, buf, len);
     }
+
+    #else
+    crc = crc_bytes(params, crc, buf, len);
+    #endif
 
     return crc_final(params, crc);
 }
