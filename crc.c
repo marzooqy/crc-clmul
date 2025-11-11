@@ -77,8 +77,8 @@ static uint64_t crc_final(params_t *params, uint64_t crc) {
 /* Computes (a * b) mod p. */
 static uint64_t multmodp(params_t *params, uint64_t a, uint64_t b) {
     uint64_t prod = 0;
+
     if(params->refin) {
-        // Reflected polynomial.
         const uint64_t top = (uint64_t)1 << (params->width - 1);
         const uint64_t mask = top - 1;
         while(true) {
@@ -93,7 +93,6 @@ static uint64_t multmodp(params_t *params, uint64_t a, uint64_t b) {
         }
     }
     else {
-        // Normal polynomial.
         const uint64_t top = (uint64_t)1 << 63;
         const uint64_t bottom = (uint64_t)1 << (64 - params->width);
         const uint64_t mask = (top - 1) << (65 - params->width);
@@ -114,11 +113,14 @@ static uint64_t multmodp(params_t *params, uint64_t a, uint64_t b) {
 /* Fills combine_table with values of x^2^i mod p. */
 static void crc_build_combine_table(params_t *params) {
     uint64_t sq = params->refin ? (uint64_t)1 << (params->width - 2)
-                                : (uint64_t)1 << (65 - params->width); // x^1
+                                : (uint64_t)1 << (65 - params->width); //x^1
 
-    params->combine_table[0] = sq;
-    for(uint8_t i = 1; i < 64; i++) {
-        sq = multmodp(params, sq, sq); // x^2^i
+    sq = multmodp(params, sq, sq); //x^2
+    sq = multmodp(params, sq, sq); //x^4
+
+    //First value is x^8 mod p.
+    for(uint8_t i = 0; i < 64; i++) {
+        sq = multmodp(params, sq, sq); //x^2^(i+3)
         params->combine_table[i] = sq;
     }
 }
@@ -126,7 +128,7 @@ static void crc_build_combine_table(params_t *params) {
 /* Multiplies the various x^2^i mod p factors from combine_table to get x^n mod p. */
 static uint64_t xnmodp_table(params_t *params, uint64_t n) {
     uint64_t xp = params->refin ? (uint64_t)1 << (params->width - 1)
-                                : (uint64_t)1 << (64 - params->width); // x^0
+                                : (uint64_t)1 << (64 - params->width); //x^0
     uint8_t k = 0;
     while(n) {
         if(n & 1) {
@@ -147,7 +149,7 @@ uint64_t crc_combine(params_t *params, uint64_t crc, uint64_t crc2, uint64_t len
     crc = crc_initial(params, crc);
     crc2 = crc_initial(params, crc2);
 
-    crc = multmodp(params, xnmodp_table(params, len * 8), crc) ^ crc2;
+    crc = multmodp(params, xnmodp_table(params, len), crc) ^ crc2;
 
     return crc_final(params, crc);
 }
@@ -348,12 +350,19 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
     #endif
 
     if(len >= 128) {
-        uint128_t b1, b2, b3, b4;
-
         //After every multiplication the result is split into an upper and
         //lower half to avoid overflowing the register (Intel paper p8-9).
         uint128_t h1, h2, h3, h4;
         uint128_t l1, l2, l3, l4;
+
+        //Load 64 bytes from buf into the registers.
+        uint128_t b1 = LOAD(buf + 0x00);
+        uint128_t b2 = LOAD(buf + 0x10);
+        uint128_t b3 = LOAD(buf + 0x20);
+        uint128_t b4 = LOAD(buf + 0x30);
+
+        buf += 64;
+        len -= 64;
 
         if(params->refin) {
             //Reflected algorithm
@@ -361,17 +370,8 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
             uint128_t c = SET(0, crc);
             uint128_t k2k1 = SET(params->k2, params->k1);
 
-            //Load 64 bytes from buf into the registers.
-            b1 = LOAD(buf + 0x00);
-            b2 = LOAD(buf + 0x10);
-            b3 = LOAD(buf + 0x20);
-            b4 = LOAD(buf + 0x30);
-
             //XOR with the init.
             b1 = XOR(b1, c);
-
-            buf += 64;
-            len -= 64;
 
             while(len >= 64) {
                 //Multiply by k1.
@@ -417,12 +417,6 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
             //Swaps the endianess of the register.
             table_t tbl = GET_SWAP_TABLE();
 
-            //Load 64 bytes from buf into the registers.
-            b1 = LOAD(buf + 0x00);
-            b2 = LOAD(buf + 0x10);
-            b3 = LOAD(buf + 0x20);
-            b4 = LOAD(buf + 0x30);
-
             //Byte swap.
             b1 = SWAP(b1, tbl);
             b2 = SWAP(b2, tbl);
@@ -431,9 +425,6 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
 
             //XOR the left side of buf with the initial value.
             b1 = XOR(b1, c);
-
-            buf += 64;
-            len -= 64;
 
             while(len >= 64) {
                 //Multiply by k1.
