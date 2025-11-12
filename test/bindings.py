@@ -24,7 +24,7 @@ class params_t(ctypes.Structure):
                ('table', ctypes.c_uint64 * 256),
                ('combine_table', ctypes.c_uint64 * 64)]
 
-_crc.crc_params.argtypes = [ctypes.c_uint8, ctypes.c_uint64, ctypes.c_uint64, ctypes.c_bool, ctypes.c_bool, ctypes.c_uint64]
+_crc.crc_params.argtypes = [ctypes.c_uint8, ctypes.c_uint64, ctypes.c_uint64, ctypes.c_bool, ctypes.c_bool, ctypes.c_uint64, ctypes.c_uint64]
 _crc.crc_params.restype = params_t
 
 _crc.crc_table.argtypes = [ctypes.POINTER(params_t), ctypes.c_uint64, ctypes.c_char_p, ctypes.c_uint64]
@@ -37,7 +37,7 @@ _crc.crc_combine.argtypes = [ctypes.POINTER(params_t), ctypes.c_uint64, ctypes.c
 _crc.crc_combine.restype = ctypes.c_uint64
 
 def crc_params(width, poly, init, refin, refout, xorout, check=0):
-    return _crc.crc_params(width, poly, init, refin, refout, xorout)
+    return _crc.crc_params(width, poly, init, refin, refout, xorout, check)
 
 def crc_table(params, crc, buf):
     return _crc.crc_table(ctypes.byref(params), crc, buf, len(buf))
