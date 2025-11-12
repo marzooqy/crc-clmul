@@ -5,10 +5,12 @@
 #include "intrinsics.h"
 #endif
 
-#ifdef DEBUG
+#if defined(DEBUG) || defined(CHECK_PARAMS)
 #include <assert.h>
 #include <stdio.h>
+#endif
 
+#ifdef DEBUG
 // Prints a 64-bit integer in hexadecimal form.
 static void print_hex64(uint64_t n) {
     printf("0x%llx\n", n);
@@ -253,7 +255,31 @@ static void crc_build_table(params_t *params) {
    This basically makes the CLMUL instruction compute the correct result
    despite the fact that we are working in the reflected domain. */
 
-params_t crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, bool refout, uint64_t xorout) {
+params_t crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, bool refout, uint64_t xorout, uint64_t check) {
+    #ifdef CHECK_PARAMS
+    if(width < 2 || width > 64) {
+        printf("width should be larger than 1 and less than or equal to 64.\n");
+        assert(0);
+    }
+
+    if(width < 64) {
+        if(poly >> width) {
+            printf("poly width is larger than the width parameter.\n");
+            assert(0);
+        }
+
+        if(init >> width) {
+            printf("init width is larger than the width parameter.\n");
+            assert(0);
+        }
+
+        if(xorout >> width) {
+            printf("xorout width is larger than the width parameter.\n");
+            assert(0);
+        }
+    }
+    #endif
+
     #ifndef CPU_NO_SIMD
     cpu_check_features();
     #endif
@@ -286,6 +312,14 @@ params_t crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, boo
 
     crc_build_table(&params);
     crc_build_combine_table(&params);
+
+    #ifdef CHECK_PARAMS
+    uint64_t crc = crc_table(&params, params.init, "123456789", 9);
+    if(crc != check) {
+        printf("check value doesn't match the CRC computed from the provided parameters.\n");
+        assert(0);
+    }
+    #endif
 
     return params;
 }
