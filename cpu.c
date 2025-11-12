@@ -9,7 +9,7 @@
 
 #ifndef CPU_NO_SIMD
     #if defined(__x86_64__) || defined(_M_AMD64)
-        #if defined(_WIN32)
+        #ifdef _WIN32
             #define X86_WINDOWS
         #else
             #define X86_NOT_WINDOWS
