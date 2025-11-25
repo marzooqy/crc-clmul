@@ -1,8 +1,10 @@
+#include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 #include <math.h>
+
 #include "crc.h"
 
 uint64_t ten_pow(int8_t n) {
@@ -34,8 +36,12 @@ void bench(uint64_t n, uint64_t len) {
         buf[i] = i & 0xff;
     }
 
+    uint8_t err;
+
     //Reflected
-    params = crc_params(64, 0x42f0e1eba9ea3693, 0xffffffffffffffff, true, true, 0xffffffffffffffff);
+    params = crc_params(64, 0x42f0e1eba9ea3693, 0xffffffffffffffff, true, true, 0xffffffffffffffff, 0x995dc9bbdf1939fa, &err);
+
+    assert(err == 0);
 
     start = clock();
 
@@ -50,7 +56,9 @@ void bench(uint64_t n, uint64_t len) {
     printf(" %.2f ", speed);
 
     //Non-Reflected
-    params = crc_params(64, 0x42f0e1eba9ea3693, 0xffffffffffffffff, false, false, 0xffffffffffffffff);
+    params = crc_params(64, 0x42f0e1eba9ea3693, 0xffffffffffffffff, false, false, 0xffffffffffffffff, 0x62ec59e3f1a4f00a, &err);
+
+    assert(err == 0);
 
     start = clock();
 

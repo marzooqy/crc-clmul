@@ -25,9 +25,20 @@ typedef struct {
 } params_t;
 
 /* Create a params_t struct and initialize it with the provided parameters.
-   Calculate the values of k1, k2, and the table. Check the input if CHECK_PARAMS
-   is defined and crash on error. check is only used if CHECK_PARAMS is defined.*/
-params_t DLL_EXPORT crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, bool refout, uint64_t xorout, uint64_t check);
+   Calculate the values of k1, k2, and the table. */
+params_t DLL_EXPORT crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, bool refout, uint64_t xorout, uint64_t check, uint8_t *error);
+
+/* List of crc_params errors */
+enum DLL_EXPORT crc_params_errors {
+    CRC_WIDTH_NOT_SUPPORTED = 1,
+    CRC_POLY_BIG = 2,
+    CRC_INIT_BIG = 3,
+    CRC_XOROUT_BIG = 4,
+    CRC_CHECK_INVALID = 5
+};
+
+/* Print the error from crc_params */
+void DLL_EXPORT crc_print_error(uint8_t error);
 
 /* Calculate the CRC using the table-based algorithm.
    Use params.init as the initial CRC value.*/

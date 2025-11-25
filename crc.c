@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include "crc.h"
 
 #ifndef CPU_NO_SIMD
@@ -5,12 +6,9 @@
 #include "intrinsics.h"
 #endif
 
-#if defined(DEBUG) || defined(CHECK_PARAMS)
-#include <assert.h>
-#include <stdio.h>
-#endif
-
 #ifdef DEBUG
+#include <assert.h>
+
 // Prints a 64-bit integer in hexadecimal form.
 static void print_hex64(uint64_t n) {
     printf("0x%llx\n", n);
@@ -19,7 +17,7 @@ static void print_hex64(uint64_t n) {
 #ifndef CPU_NO_SIMD
 // Prints the value of a 128-bit register in hexadecimal form.
 static void print_hex128(uint128_t n) {
-    unsigned char* c = (unsigned char*) &n;
+    unsigned char *c = (unsigned char*) &n;
     printf("0x");
     for(uint8_t i = 0; i < 16; i++) {
         printf("%02x", c[15 - i]);
@@ -163,7 +161,7 @@ uint64_t crc_combine(params_t *params, uint64_t crc, uint64_t crc2, uint64_t len
 /* Computes x^n mod p. This is similar to the regular CRC calculation but we have
    to stop earlier, as the data isn't multiplied by x^w like in CRC. Assumes that
    the polynomial has been scaled to 64-bits, and that n is larger than 64.*/
-static uint64_t xnmodp(params_t* params, uint16_t n) {
+static uint64_t xnmodp(params_t *params, uint16_t n) {
     uint64_t mod = params->poly;
 
     if(params->refin) {
@@ -255,36 +253,36 @@ static void crc_build_table(params_t *params) {
    This basically makes the CLMUL instruction compute the correct result
    despite the fact that we are working in the reflected domain. */
 
-params_t crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, bool refout, uint64_t xorout, uint64_t check) {
-    #ifdef CHECK_PARAMS
-    if(width < 2 || width > 64) {
-        printf("width should be larger than 1 and less than or equal to 64.\n");
-        assert(0);
-    }
-
-    if(width < 64) {
-        if(poly >> width) {
-            printf("poly width is larger than the width parameter.\n");
-            assert(0);
-        }
-
-        if(init >> width) {
-            printf("init width is larger than the width parameter.\n");
-            assert(0);
-        }
-
-        if(xorout >> width) {
-            printf("xorout width is larger than the width parameter.\n");
-            assert(0);
-        }
-    }
-    #endif
-
+params_t crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, bool refout, uint64_t xorout, uint64_t check, uint8_t *error) {
     #ifndef CPU_NO_SIMD
     cpu_check_features();
     #endif
 
     params_t params;
+    *error = 0;
+
+    if(width < 2 || width > 64) {
+        *error = CRC_WIDTH_NOT_SUPPORTED;
+    }
+
+    if(width < 64) {
+        if(poly >> width) {
+            *error = CRC_POLY_BIG;
+        }
+
+        if(init >> width) {
+            *error = CRC_INIT_BIG;
+        }
+
+        if(xorout >> width) {
+            *error = CRC_XOROUT_BIG;
+        }
+    }
+
+    if(*error != 0) {
+        return params;
+    }
+
     params.width = width;
 
     //Reflected:     (p * x^(64-w))'
@@ -313,15 +311,39 @@ params_t crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, boo
     crc_build_table(&params);
     crc_build_combine_table(&params);
 
-    #ifdef CHECK_PARAMS
     uint64_t crc = crc_table(&params, params.init, "123456789", 9);
     if(crc != check) {
-        printf("check value doesn't match the CRC computed from the provided parameters.\n");
-        assert(0);
+        *error = CRC_CHECK_INVALID;
     }
-    #endif
 
     return params;
+}
+
+/* Print a readable error message for the error coming from crc_params. */
+void crc_print_error(uint8_t error) {
+    switch(error) {
+        case 0:
+            printf("CRC is valid.\n");
+            break;
+        case CRC_WIDTH_NOT_SUPPORTED:
+            printf("width should be larger than 1 and less than or equal to 64.\n");
+            break;
+        case CRC_POLY_BIG:
+            printf("poly width is larger than the width parameter.\n");
+            break;
+        case CRC_INIT_BIG:
+            printf("init width is larger than the width parameter.\n");
+            break;
+        case CRC_XOROUT_BIG:
+            printf("xorout width is larger than the width parameter.\n");
+            break;
+        case CRC_CHECK_INVALID:
+            printf("check value doesn't match the CRC computed from the provided parameters.\n");
+            break;
+        default:
+            printf("Unknown error value.\n");
+            break;
+    }
 }
 
 /* Compute the CRC byte-by-byte using the lookup table. */
