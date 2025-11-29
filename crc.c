@@ -74,19 +74,16 @@ static uint64_t crc_final(params_t *params, uint64_t crc) {
  * For conditions of distribution and use, see copyright notice in crcany.c.
  */
 
-/* Computes (a * b) mod p. */
+/* Computes (a * b) mod p. Assumes that a and b have the same width and
+   alignment as the CRC. */
 static uint64_t multmodp(params_t *params, uint64_t a, uint64_t b) {
     uint64_t prod = 0;
 
     if(params->refin) {
         const uint64_t top = (uint64_t)1 << (params->width - 1);
-        const uint64_t mask = top - 1;
-        while(true) {
+        for(uint8_t i = 0; i < params->width; i++) {
             if(a & top) {
                 prod ^= b;
-                if((a & mask) == 0) {
-                    break;
-                }
             }
             a <<= 1;
             b = b & 1 ? (b >> 1) ^ params->poly : b >> 1;
@@ -95,13 +92,9 @@ static uint64_t multmodp(params_t *params, uint64_t a, uint64_t b) {
     else {
         const uint64_t top = (uint64_t)1 << 63;
         const uint64_t bottom = (uint64_t)1 << (64 - params->width);
-        const uint64_t mask = (top - 1) << (65 - params->width);
-        while(true) {
+        for(uint8_t i = 0; i < params->width; i++) {
             if(a & bottom) {
                 prod ^= b;
-                if((a & mask) == 0) {
-                    break;
-                }
             }
             a >>= 1;
             b = b & top ? (b << 1) ^ params->poly : b << 1;
@@ -125,33 +118,54 @@ static void crc_build_combine_table(params_t *params) {
     }
 }
 
-/* Multiplies the various x^2^i mod p factors from combine_table to get x^n mod p. */
-static uint64_t xnmodp_table(params_t *params, uint64_t n) {
+/* Multiplies the various x^2^i mod p factors to get x^8n mod p. This constant
+   can be precomputed once and reused in conjunction with crc_combine_fixed
+   if the length of the second CRC's message is always the same. */
+uint64_t crc_combine_constant(params_t *params, uint64_t len) {
     uint64_t xp = params->refin ? (uint64_t)1 << (params->width - 1)
                                 : (uint64_t)1 << (64 - params->width); //x^0
-    uint8_t k = 0;
-    while(n) {
-        if(n & 1) {
-            xp = multmodp(params, params->combine_table[k], xp);
+    uint8_t i = 0;
+    while(len) {
+        if(len & 1) {
+            xp = multmodp(params, xp, params->combine_table[i]);
         }
-        n >>= 1;
-        k++;
+        len >>= 1;
+        i++;
     }
     return xp;
 }
 
-/* Mark Adler's O(log n) combine algorithm. It's fairly efficient so SIMD intrinsics
-   might not be needed. */
-uint64_t crc_combine(params_t *params, uint64_t crc, uint64_t crc2, uint64_t len) {
+/* Find CRC(A + B) from CRC(A) and CRC(B) if the length of B is fixed using the
+   constant precomputed from crc_combine_constant.*/
+uint64_t crc_combine_fixed(params_t *params, uint64_t crc, uint64_t crc2, uint64_t xp) {
     /* It's not clear why we should XOR with the initial. It could be that we
        are treating the CRC as the first incoming bits to the register. */
     crc ^= params->init ^ params->xorout;
     crc = crc_initial(params, crc);
     crc2 = crc_initial(params, crc2);
 
-    crc = multmodp(params, xnmodp_table(params, len), crc) ^ crc2;
+    crc = multmodp(params, crc, xp) ^ crc2;
 
     return crc_final(params, crc);
+}
+
+/* Mark Adler's O(log n) combine algorithm. It's fairly efficient so SIMD intrinsics
+   might not be needed. Use if the length of the second CRC is variable.*/
+uint64_t crc_combine(params_t *params, uint64_t crc, uint64_t crc2, uint64_t len) {
+    crc ^= params->init ^ params->xorout;
+    crc = crc_initial(params, crc);
+    crc2 = crc_initial(params, crc2);
+
+    uint8_t i = 0;
+    while(len) {
+        if(len & 1) {
+            crc = multmodp(params, crc, params->combine_table[i]);
+        }
+        len >>= 1;
+        i++;
+    }
+
+    return crc_final(params, crc ^ crc2);
 }
 
 //--------------------
