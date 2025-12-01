@@ -13,9 +13,7 @@ const unsigned char SWAP_TABLE[] = {15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3,
 
 // #define CLMUL(a, b, ac, bc) _mm_clmulepi64_si128(a, b, (bc ? 0x10 : 0x00) | (ac ? 0x01 : 0x00))
 
-#include <emmintrin.h> //SSE2
-#include <tmmintrin.h> //SSSE3
-#include <smmintrin.h> //SSE4.1
+#include <nmmintrin.h> //SSE4.2
 #include <wmmintrin.h> //AES + PCLMUL
 
 typedef __m128i uint128_t;
@@ -27,12 +25,13 @@ typedef __m128i table_t;
 #define SET(hi, lo) _mm_set_epi64x(hi, lo)
 
 //Extract a 64-bit integer from a 128-bit integer.
-#define EXTRACT(x, i) _mm_extract_epi64(x, i)
+#define GET(x, i) _mm_extract_epi64(x, i)
 
 //Table for _mm_shuffle_epi8 that swaps the endianess of a 128-bit integer.
 #define GET_SWAP_TABLE() _mm_loadu_si128((__m128i*)SWAP_TABLE)
 
-//Load 16 bytes from ptr into a 128-bit integer.
+//Load 16 bytes from ptr into a 128-bit integer. Assumes that ptr is aligned on
+//a 64-bit memory boundary.
 #define LOAD(ptr) _mm_load_si128((__m128i*)(ptr))
 
 //Multiply the high 64-bits of two 128-bit integers.
@@ -58,7 +57,7 @@ typedef uint8x16_t table_t;
 #define SET(hi, lo) vsetq_lane_u64(hi, vsetq_lane_u64(lo, vdupq_n_u64(0), 0), 1)
 
 //Extract a 64-bit integer from a 64x2 vector.
-#define EXTRACT(x, i) vgetq_lane_u64(x, i)
+#define GET(x, i) vgetq_lane_u64(x, i)
 
 //Table for vqtbl1q_u8 that swaps the endianess of a 64x2 vector.
 #define GET_SWAP_TABLE() vld1q_u8(SWAP_TABLE)
