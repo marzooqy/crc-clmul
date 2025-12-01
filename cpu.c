@@ -140,10 +140,10 @@
                 __cpuid(1, abcd[0], abcd[1], abcd[2], abcd[3]);
             #endif
 
-            int x86_cpu_has_ssse3 = abcd[2] & 0x200;
+            int x86_cpu_has_sse42 = abcd[2] & 0x100000;
             int x86_cpu_has_pclmulqdq = abcd[2] & 0x2;
 
-            cpu_enable_simd = x86_cpu_has_ssse3 && x86_cpu_has_pclmulqdq;
+            cpu_enable_simd = x86_cpu_has_sse42 && x86_cpu_has_pclmulqdq;
         }
     #endif // ARM | x86
 #endif // NO SIMD CPU
