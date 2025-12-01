@@ -98,7 +98,7 @@ def ref(a, w):
 
 #Reflect all bytes in a bytes object
 def ref_bytes(buf):
-    return bytes([ref(b, 8) for b in buf])
+    return bytes((ref(b, 8) for b in buf))
 
 # "Mathematical" CRC
 # CRC is defined as M * X^W mod P

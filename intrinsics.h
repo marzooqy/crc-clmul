@@ -15,6 +15,7 @@ const unsigned char SWAP_TABLE[] = {15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3,
 
 #include <emmintrin.h> //SSE2
 #include <tmmintrin.h> //SSSE3
+#include <smmintrin.h> //SSE4.1
 #include <wmmintrin.h> //AES + PCLMUL
 
 typedef __m128i uint128_t;
@@ -24,6 +25,9 @@ typedef __m128i table_t;
 
 //Create a 128-bit integer from two 64-bit integers.
 #define SET(hi, lo) _mm_set_epi64x(hi, lo)
+
+//Extract a 64-bit integer from a 128-bit integer.
+#define EXTRACT(x, i) _mm_extract_epi64(x, i)
 
 //Table for _mm_shuffle_epi8 that swaps the endianess of a 128-bit integer.
 #define GET_SWAP_TABLE() _mm_loadu_si128((__m128i*)SWAP_TABLE)
@@ -52,6 +56,9 @@ typedef uint8x16_t table_t;
 
 //Create a 64x2 vector from two 64-bit integers.
 #define SET(hi, lo) vsetq_lane_u64(hi, vsetq_lane_u64(lo, vdupq_n_u64(0), 0), 1)
+
+//Extract a 64-bit integer from a 64x2 vector.
+#define EXTRACT(x, i) vgetq_lane_u64(x, i)
 
 //Table for vqtbl1q_u8 that swaps the endianess of a 64x2 vector.
 #define GET_SWAP_TABLE() vld1q_u8(SWAP_TABLE)

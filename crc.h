@@ -34,7 +34,8 @@ enum DLL_EXPORT crc_params_errors {
     CRC_POLY_BIG = 2,
     CRC_INIT_BIG = 3,
     CRC_XOROUT_BIG = 4,
-    CRC_CHECK_INVALID = 5
+    CRC_POLY_EVEN = 5,
+    CRC_CHECK_INVALID = 6
 };
 
 /* Print an error message depending on the error received from crc_params. */

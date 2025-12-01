@@ -27,6 +27,8 @@ static void print_hex128(uint128_t n) {
 #endif
 #endif
 
+static uint64_t crc_bytes(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len);
+
 /* Reflects an integer x of width w */
 static uint64_t reflect(uint64_t x, uint8_t w) {
     x = ((x >> 32) & 0xffffffff) | ((x << 32) & 0xffffffff00000000);
@@ -36,6 +38,13 @@ static uint64_t reflect(uint64_t x, uint8_t w) {
     x = ((x >> 2) & 0x3333333333333333) | ((x << 2) & 0xcccccccccccccccc);
     x = ((x >> 1) & 0x5555555555555555) | ((x << 1) & 0xaaaaaaaaaaaaaaaa);
     return x >> (64 - w);
+}
+
+static uint64_t swap(uint64_t x) {
+    return (x & 0xff00000000000000) >> 56 | (x & 0xff) << 56 |
+           (x & 0xff000000000000) >> 40 | (x & 0xff00) << 40 |
+           (x & 0xff0000000000) >> 24 | (x & 0xff0000) << 24 |
+           (x & 0xff00000000) >> 8 | (x & 0xff000000) << 8;
 }
 
 /* Applied before computing the CRC. Reverse the xorout from the last application.
@@ -76,37 +85,84 @@ static uint64_t crc_final(params_t *params, uint64_t crc) {
 
 /* Computes (a * b) mod p. Assumes that a and b have the same width and
    alignment as the CRC. */
-static uint64_t multmodp(params_t *params, uint64_t a, uint64_t b) {
-    uint64_t prod = 0;
+static uint64_t multmodp_sw(params_t *params, uint64_t a, uint64_t b) {
+    const uint64_t top = (uint64_t)1 << 63;
+    uint64_t hi = 0;
+    uint64_t lo = 0;
+
+    if(a & 1) {
+        lo ^= b;
+    }
+
+    for(uint8_t i = 1; i < 64; i++) {
+        if((a >> i) & 1) {
+            lo ^= b << i;
+            hi ^= b >> (64 - i);
+        }
+    }
 
     if(params->refin) {
-        const uint64_t top = (uint64_t)1 << (params->width - 1);
-        for(uint8_t i = 0; i < params->width; i++) {
-            if(a & top) {
-                prod ^= b;
-            }
-            a <<= 1;
-            b = b & 1 ? (b >> 1) ^ params->poly : b >> 1;
-        }
+        hi = (hi << 1) | ((lo & top) >> 63);
+        lo <<= 1;
+        lo = crc_bytes(params, 0, (unsigned char*) &lo, 8);
+
+    } else {
+        hi = swap(hi);
+        hi = crc_bytes(params, 0, (unsigned char*) &hi, 8);
     }
-    else {
-        const uint64_t top = (uint64_t)1 << 63;
-        const uint64_t bottom = (uint64_t)1 << (64 - params->width);
-        for(uint8_t i = 0; i < params->width; i++) {
-            if(a & bottom) {
-                prod ^= b;
-            }
-            a >>= 1;
-            b = b & top ? (b << 1) ^ params->poly : b << 1;
-        }
+
+    return hi ^ lo;
+}
+
+#ifndef CPU_NO_SIMD
+#ifdef  __GNUC__
+#ifdef __x86_64__
+__attribute__((target("sse4.1,pclmul")))
+#elif __aarch64__
+__attribute__((target("+aes")))
+#endif
+#endif
+static uint64_t multmodp_hw(params_t *params, uint64_t a, uint64_t b) {
+    const uint64_t top = (uint64_t)1 << 63;
+
+    //Load into a register and multiply.
+    uint128_t ar = SET(0, a);
+    uint128_t br = SET(0, b);
+    uint128_t prod = CLMUL_LO(ar, br);
+    uint64_t lo = EXTRACT(prod, 0);
+    uint64_t hi = EXTRACT(prod, 1);
+
+    //mod P.
+    if(params->refin) {
+        //Shift to the left by 1 to account for reflection (Intel paper p20).
+        hi = (hi << 1) | ((lo & top) >> 63);
+        lo <<= 1;
+        lo = crc_bytes(params, 0, (unsigned char*) &lo, 8);
+
+    } else {
+        hi = swap(hi);
+        hi = crc_bytes(params, 0, (unsigned char*) &hi, 8);
     }
-    return prod;
+
+    return hi ^ lo;
+}
+#endif
+
+static uint64_t multmodp(params_t *params, uint64_t a, uint64_t b) {
+    #ifndef CPU_NO_SIMD
+    if(cpu_enable_simd) {
+        return multmodp_hw(params, a, b);
+    } else {
+        return multmodp_sw(params, a, b);
+    }
+    #else
+    return multmodp_sw(params, a, b);
+    #endif
 }
 
 /* Fills combine_table with values of x^2^i mod p. */
 static void crc_build_combine_table(params_t *params) {
-    uint64_t sq = params->refin ? (uint64_t)1 << (params->width - 2)
-                                : (uint64_t)1 << (65 - params->width); //x^1
+    uint64_t sq = params->refin ? (uint64_t)1 << 62 : 2; //x^1
 
     sq = multmodp(params, sq, sq); //x^2
     sq = multmodp(params, sq, sq); //x^4
@@ -122,8 +178,7 @@ static void crc_build_combine_table(params_t *params) {
    can be precomputed once and reused in conjunction with crc_combine_fixed
    if the length of the second CRC's message is always the same. */
 uint64_t crc_combine_constant(params_t *params, uint64_t len) {
-    uint64_t xp = params->refin ? (uint64_t)1 << (params->width - 1)
-                                : (uint64_t)1 << (64 - params->width); //x^0
+    uint64_t xp = params->refin ? (uint64_t)1 << 63 : 1; //x^0
     uint8_t i = 0;
     while(len) {
         if(len & 1) {
@@ -293,6 +348,10 @@ params_t crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, boo
         }
     }
 
+    if((poly & 1) != 1) {
+        *error = CRC_POLY_EVEN;
+    }
+
     if(*error != 0) {
         return params;
     }
@@ -350,6 +409,9 @@ void crc_print_error(uint8_t error) {
             break;
         case CRC_XOROUT_BIG:
             printf("xorout width is larger than the width parameter.\n");
+            break;
+        case CRC_POLY_EVEN:
+            printf("CRC polynomial is even.\n");
             break;
         case CRC_CHECK_INVALID:
             printf("check value doesn't match the CRC computed from the provided parameters.\n");
