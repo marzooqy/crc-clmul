@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include "crc.h"
 
-#ifndef CPU_NO_SIMD
+#ifndef DISABLE_SIMD
 #include "cpu.h"
 #include "intrinsics.h"
 #endif
@@ -29,7 +29,7 @@ static uint64_t multmodp(params_t *params, uint64_t a, uint64_t b);
 static void crc_build_table(params_t *params);
 static void crc_build_combine_table(params_t *params);
 
-#ifndef CPU_NO_SIMD
+#ifndef DISABLE_SIMD
 static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len);
 static uint64_t multmodp_hw(params_t *params, uint64_t a, uint64_t b);
 #endif
@@ -46,7 +46,7 @@ static void print_hex64(uint64_t n) {
     printf("0x%llx\n", n);
 }
 
-#ifndef CPU_NO_SIMD
+#ifndef DISABLE_SIMD
 /* Prints the value of a 128-bit register in hexadecimal form. */
 static void print_hex128(uint128_t n) {
     unsigned char *c = (unsigned char*) &n;
@@ -170,7 +170,7 @@ static uint64_t modp(params_t *params, uint64_t hi, uint64_t lo) {
    despite the fact that we are working in the reflected domain. */
 
 params_t crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, bool refout, uint64_t xorout, uint64_t check, uint8_t *error) {
-    #ifndef CPU_NO_SIMD
+    #ifndef DISABLE_SIMD
     cpu_check_features();
     #endif
 
@@ -218,7 +218,7 @@ params_t crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, boo
 
     params.xorout = xorout;
 
-    #ifndef CPU_NO_SIMD
+    #ifndef DISABLE_SIMD
     //Reflected:     (x^(512+64-1) mod p)'
     //Non-reflected:  x^(512+64) mod p
     params.k1 = refin ? xnmodp(&params, 575) : xnmodp(&params, 576);
@@ -359,7 +359,7 @@ uint64_t crc_table(params_t *params, uint64_t crc, unsigned char const *buf, uin
    It should be possible to extend this algorithm to use the 256 and 512 bit
    variants of CLMUL, using a similar approach to the one shown here.*/
 
-#ifndef CPU_NO_SIMD
+#ifndef DISABLE_SIMD
 TARGET_ATTRIBUTE
 static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len) {
     //Align to a 16 byte memory boundary.
@@ -515,7 +515,7 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
 uint64_t crc_calc(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len) {
     crc = crc_initial(params, crc);
 
-    #ifndef CPU_NO_SIMD
+    #ifndef DISABLE_SIMD
     if(cpu_enable_simd) {
         crc = crc_clmul(params, crc, buf, len);
     } else {
@@ -561,7 +561,7 @@ static uint64_t multmodp_sw(params_t *params, uint64_t a, uint64_t b) {
 }
 
 /* Hardware version of multmodp. */
-#ifndef CPU_NO_SIMD
+#ifndef DISABLE_SIMD
 TARGET_ATTRIBUTE
 static uint64_t multmodp_hw(params_t *params, uint64_t a, uint64_t b) {
     //Load into two registers and multiply.
@@ -587,7 +587,7 @@ static uint64_t multmodp_hw(params_t *params, uint64_t a, uint64_t b) {
 /* Chooses the version of multmodp to use based on the availability of
    hardware intrinsics.*/
 static uint64_t multmodp(params_t *params, uint64_t a, uint64_t b) {
-    #ifndef CPU_NO_SIMD
+    #ifndef DISABLE_SIMD
     if(cpu_enable_simd) {
         return multmodp_hw(params, a, b);
     } else {

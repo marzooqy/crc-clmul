@@ -102,7 +102,7 @@ jobs:
     - uses: actions/checkout@v5
     - name: Compile library
       run: |
-            gcc -c -DCPU_NO_SIMD -fPIC -O3 crc.c
+            gcc -c -DDISABLE_SIMD -fPIC -O3 crc.c
             gcc -shared crc.o -o test/crc.so
     - name: Run test
       run: python test/test.py
