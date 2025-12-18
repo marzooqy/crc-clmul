@@ -357,7 +357,7 @@ uint64_t crc_table(params_t *params, uint64_t crc, unsigned char const *buf, uin
    buffer is small, but in that case the speed of the table algorithm is enough.
 
    It should be possible to extend this algorithm to use the 256 and 512 bit
-   variants of CLMUL, using a similar approach to the one shown here.*/
+   variants of CLMUL, using a similar approach to the one shown here. */
 
 #ifndef DISABLE_SIMD
 TARGET_ATTRIBUTE

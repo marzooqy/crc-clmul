@@ -1,6 +1,24 @@
 from bindings import *
 from models import models
+import sys
 
+# Test CPU features
+use_simd = True
+
+if len(sys.argv) > 1 and sys.argv[1] == '--no_simd':
+    use_simd = False
+
+cpu_check_features()
+
+if use_simd and not cpu_enable_simd:
+    raise Exception('Expected SIMD intrinsics to be enabled')
+
+if not use_simd and cpu_enable_simd:
+    raise Exception('Expected SIMD intrinsics to be disabled')
+
+#----------------------------------------
+
+# Test CRC
 test_data = bytes(b & 0xff for b in range(300))
 failed = False
 
@@ -48,7 +66,7 @@ for name, model in models.items():
             print("clmul unaligned: ", hex(value), hex(value2), value == value2)
             failed = True
 
-    #Test 6: Test crc_combine_constant and crc_combine_fixed
+    # Test 6: Test crc_combine_constant and crc_combine_fixed
     xp = crc_combine_constant(params, 4)
     value = crc_calc(params, params.init, b'12345')
     value2 = crc_calc(params, params.init, b'6789')
@@ -58,7 +76,7 @@ for name, model in models.items():
     if value != model.check:
         failed = True
 
-    #Test 6: Test crc_combine
+    # Test 7: Test crc_combine
     value = crc_calc(params, params.init, b'12345')
     value2 = crc_calc(params, params.init, b'6789')
     value = crc_combine(params, value, value2, 4)
