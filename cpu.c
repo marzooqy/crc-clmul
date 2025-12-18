@@ -9,9 +9,15 @@
 
 bool cpu_enable_simd = false;
 
-#ifndef DISABLE_SIMD
+#ifdef DISABLE_SIMD
+
+void cpu_check_features() {}
+
+#else
 
 static void _cpu_check_features();
+
+//----------------------------------------
 
 /* Init once */
 

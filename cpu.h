@@ -10,7 +10,13 @@
 
 #include <stdbool.h>
 
-extern bool cpu_enable_simd;
-void cpu_check_features();
+#ifdef _MSC_VER
+#define DLL_EXPORT __declspec(dllexport)
+#else
+#define DLL_EXPORT
+#endif
+
+DLL_EXPORT extern bool cpu_enable_simd;
+DLL_EXPORT void cpu_check_features();
 
 #endif

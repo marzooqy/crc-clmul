@@ -11,7 +11,7 @@ else:
 
 _crc = ctypes.CDLL(os.path.join(os.path.dirname(__file__), 'crc' + ext))
 
-# Note: Update thie definition when the equivalent C code is changed
+# Note: Update this definition when the equivalent C code is changed
 class params_t(ctypes.Structure):
     _fields_ = [('width', ctypes.c_uint8),
                ('poly', ctypes.c_uint64),
@@ -23,6 +23,9 @@ class params_t(ctypes.Structure):
                ('k2', ctypes.c_uint64),
                ('table', ctypes.c_uint64 * 256),
                ('combine_table', ctypes.c_uint64 * 64)]
+
+_crc.cpu_check_features.argtypes = []
+_crc.cpu_check_features.restype = ctypes.c_int
 
 _crc.crc_params.argtypes = [ctypes.c_uint8, ctypes.c_uint64, ctypes.c_uint64, ctypes.c_bool, ctypes.c_bool, ctypes.c_uint64, ctypes.c_uint64, ctypes.POINTER(ctypes.c_uint8)]
 _crc.crc_params.restype = params_t
@@ -41,6 +44,9 @@ _crc.crc_combine_fixed.restype = ctypes.c_uint64
 
 _crc.crc_combine.argtypes = [ctypes.POINTER(params_t), ctypes.c_uint64, ctypes.c_uint64, ctypes.c_uint64]
 _crc.crc_combine.restype = ctypes.c_uint64
+
+cpu_check_features = _crc.cpu_check_features
+cpu_enable_simd = ctypes.c_bool.in_dll(_crc, 'cpu_enable_simd')
 
 def crc_params(width, poly, init, refin, refout, xorout, check):
     error = ctypes.c_uint8(0)
