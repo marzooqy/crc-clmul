@@ -244,7 +244,7 @@ def crc_clmul(model, buf):
             crc = ref(crc, model.width)
         return crc ^ model.xorout
 
-# Barret Reduction for 64-bits CRCs
+# Barret Reduction for 64-bit CRCs
 # This is strictly following the Intel paper
 def barret(model, value):
     p = (1 << model.width) | model.poly

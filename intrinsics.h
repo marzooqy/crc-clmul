@@ -7,8 +7,8 @@ const unsigned char SWAP_TABLE[] = {15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3,
 
 #if defined(__x86_64__) || defined(_M_AMD64)
 
-/* Just to clear my confusion around the selection/control bits of the PCLMULQDQ
-   instruction. 1 picks out the 64 MSBs and 0 picks the least 64. The high control
+/* Just to clear my confusion around the selection/control bits of the PCLMUL
+   intrinsic. 1 picks out the 64 MSBs and 0 picks the least 64. The high control
    bit is for b and the other is for a. */
 
 // #define CLMUL(a, b, ac, bc) _mm_clmulepi64_si128(a, b, (bc ? 0x10 : 0x00) | (ac ? 0x01 : 0x00))
@@ -31,7 +31,7 @@ typedef __m128i table_t;
 #define GET_SWAP_TABLE() _mm_loadu_si128((__m128i*)SWAP_TABLE)
 
 //Load 16 bytes from ptr into a 128-bit integer. Assumes that ptr is aligned on
-//a 64-bit memory boundary.
+//a 16 byte memory boundary.
 #define LOAD(ptr) _mm_load_si128((__m128i*)(ptr))
 
 //Multiply the high 64-bits of two 128-bit integers.
