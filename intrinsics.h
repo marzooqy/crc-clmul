@@ -18,17 +18,11 @@ const unsigned char SWAP_TABLE[] = {15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3,
 
 typedef __m128i uint128_t;
 
-//Redundant def so the same code would work on both architectures.
-typedef __m128i table_t;
-
 //Create a 128-bit integer from two 64-bit integers.
 #define SET(hi, lo) _mm_set_epi64x(hi, lo)
 
 //Extract a 64-bit integer from a 128-bit integer.
 #define GET(x, i) _mm_extract_epi64(x, i)
-
-//Table for _mm_shuffle_epi8 that swaps the endianess of a 128-bit integer.
-#define GET_SWAP_TABLE() _mm_loadu_si128((__m128i*)SWAP_TABLE)
 
 //Load 16 bytes from ptr into a 128-bit integer. Assumes that ptr is aligned on
 //a 16 byte memory boundary.
@@ -41,7 +35,7 @@ typedef __m128i table_t;
 #define CLMUL_LO(a, b) _mm_clmulepi64_si128(a, b, 0x00)
 
 //Swap the endianess of a 128-bit integer.
-#define SWAP(x, tbl) _mm_shuffle_epi8(x, tbl)
+#define SWAP(x) _mm_shuffle_epi8(x, _mm_loadu_si128((__m128i*)SWAP_TABLE))
 
 //XOR two 128-bit integers.
 #define XOR(a, b) _mm_xor_si128(a, b)
@@ -51,7 +45,6 @@ typedef __m128i table_t;
 #include <arm_neon.h>
 
 typedef uint64x2_t uint128_t;
-typedef uint8x16_t table_t;
 
 //Create a 64x2 vector from two 64-bit integers.
 #define SET(hi, lo) vsetq_lane_u64(hi, vsetq_lane_u64(lo, vdupq_n_u64(0), 0), 1)
@@ -59,11 +52,8 @@ typedef uint8x16_t table_t;
 //Extract a 64-bit integer from a 64x2 vector.
 #define GET(x, i) vgetq_lane_u64(x, i)
 
-//Table for vqtbl1q_u8 that swaps the endianess of a 64x2 vector.
-#define GET_SWAP_TABLE() vld1q_u8(SWAP_TABLE)
-
 //Load 16 bytes from ptr into a 64x2 vector.
-#define LOAD(ptr) vld1q_u64((const uint64_t*)(ptr))
+#define LOAD(ptr) vld1q_u64((uint64_t const*)(ptr))
 
 //Multiply the high lanes of two 64x2 vectors.
 #define CLMUL_HI(a, b) vreinterpretq_u64_p128(vmull_high_p64(vreinterpretq_p64_u64(a), \
@@ -80,7 +70,7 @@ typedef uint8x16_t table_t;
 #endif
 
 //Swap the endianess of a 64x2 vector.
-#define SWAP(x, tbl) vreinterpretq_u64_u8(vqtbl1q_u8(vreinterpretq_u8_u64(x), tbl))
+#define SWAP(x) vreinterpretq_u64_u8(vqtbl1q_u8(vreinterpretq_u8_u64(x), vld1q_u8(SWAP_TABLE)))
 
 //XOR two 64x2 vectors.
 #define XOR(a, b) veorq_u64(a, b)

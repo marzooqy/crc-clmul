@@ -438,15 +438,11 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
             uint128_t c = SET(crc, 0);
             uint128_t k1k2 = SET(params->k1, params->k2);
 
-            //Shuffle mask/Index table to be used with the SWAP macro.
-            //Swaps the endianess of the register.
-            table_t tbl = GET_SWAP_TABLE();
-
             //Byte swap.
-            b1 = SWAP(b1, tbl);
-            b2 = SWAP(b2, tbl);
-            b3 = SWAP(b3, tbl);
-            b4 = SWAP(b4, tbl);
+            b1 = SWAP(b1);
+            b2 = SWAP(b2);
+            b3 = SWAP(b3);
+            b4 = SWAP(b4);
 
             //XOR the left side of buf with the initial value.
             b1 = XOR(b1, c);
@@ -471,10 +467,10 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
                 b4 = LOAD(buf + 0x30);
 
                 //Byte swap.
-                b1 = SWAP(b1, tbl);
-                b2 = SWAP(b2, tbl);
-                b3 = SWAP(b3, tbl);
-                b4 = SWAP(b4, tbl);
+                b1 = SWAP(b1);
+                b2 = SWAP(b2);
+                b3 = SWAP(b3);
+                b4 = SWAP(b4);
 
                 //XOR.
                 b1 = XOR(b1, h1);
@@ -492,10 +488,10 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
             }
 
             //Byte swap.
-            b1 = SWAP(b1, tbl);
-            b2 = SWAP(b2, tbl);
-            b3 = SWAP(b3, tbl);
-            b4 = SWAP(b4, tbl);
+            b1 = SWAP(b1);
+            b2 = SWAP(b2);
+            b3 = SWAP(b3);
+            b4 = SWAP(b4);
         }
 
         //Calculate the CRC of what's left using the table-based algorithm.

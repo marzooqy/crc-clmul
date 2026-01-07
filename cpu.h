@@ -16,7 +16,7 @@
 #define DLL_EXPORT
 #endif
 
-DLL_EXPORT extern bool cpu_enable_simd;
-DLL_EXPORT void cpu_check_features();
+extern bool DLL_EXPORT cpu_enable_simd;
+void DLL_EXPORT cpu_check_features();
 
 #endif
