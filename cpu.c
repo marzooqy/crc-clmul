@@ -109,7 +109,7 @@ static void _cpu_check_features() {
 }
 
 #else
-#error "Unsupported Architecture. Compile on X86-64 or aarch64 or use DISABLE_SIMD."
+#error "Unsupported Architecture. Compile on x86-64 or aarch64 or use DISABLE_SIMD."
 #endif
 
 #endif

@@ -25,26 +25,26 @@ const unsigned char ALIGN_ARRAY SWAP_TABLE[] = {15, 14, 13, 12, 11, 10, 9, 8, 7,
 typedef __m128i uint128_t;
 
 //Create a 128-bit integer from two 64-bit integers.
-#define SET(hi, lo) _mm_set_epi64x(hi, lo)
+#define intrin_set(hi, lo) _mm_set_epi64x(hi, lo)
 
 //Extract a 64-bit integer from a 128-bit integer.
-#define GET(x, i) _mm_extract_epi64(x, i)
+#define intrin_get(x, i) _mm_extract_epi64(x, i)
 
 //Load 16 bytes from ptr into a 128-bit integer. Assumes that ptr is aligned on
 //a 16 byte memory boundary.
-#define LOAD(ptr) _mm_load_si128((__m128i*)(ptr))
+#define intrin_load(ptr) _mm_load_si128((__m128i*)(ptr))
 
 //Multiply the high 64-bits of two 128-bit integers.
-#define CLMUL_HI(a, b) _mm_clmulepi64_si128(a, b, 0x11)
+#define intrin_clmul_hi(a, b) _mm_clmulepi64_si128(a, b, 0x11)
 
 //Multiply the low 64-bits of two 128-bit integers.
-#define CLMUL_LO(a, b) _mm_clmulepi64_si128(a, b, 0x00)
+#define intrin_clmul_lo(a, b) _mm_clmulepi64_si128(a, b, 0x00)
 
 //Swap the endianess of a 128-bit integer.
-#define SWAP(x) _mm_shuffle_epi8(x, _mm_load_si128((__m128i*)SWAP_TABLE))
+#define intrin_swap(x) _mm_shuffle_epi8(x, _mm_load_si128((__m128i*)SWAP_TABLE))
 
 //XOR two 128-bit integers.
-#define XOR(a, b) _mm_xor_si128(a, b)
+#define intrin_xor(a, b) _mm_xor_si128(a, b)
 
 #elif defined(__aarch64__) || defined(_M_ARM64)
 
@@ -53,36 +53,36 @@ typedef __m128i uint128_t;
 typedef uint64x2_t uint128_t;
 
 //Create a 64x2 vector from two 64-bit integers.
-#define SET(hi, lo) vsetq_lane_u64(hi, vdupq_n_u64(lo), 1)
+#define intrin_set(hi, lo) vsetq_lane_u64(hi, vdupq_n_u64(lo), 1)
 
 //Extract a 64-bit integer from a 64x2 vector.
-#define GET(x, i) vgetq_lane_u64(x, i)
+#define intrin_get(x, i) vgetq_lane_u64(x, i)
 
 //Load 16 bytes from ptr into a 64x2 vector.
-#define LOAD(ptr) vreinterpretq_u64_u8(vld1q_u8(ptr))
+#define intrin_load(ptr) vreinterpretq_u64_u8(vld1q_u8(ptr))
 
 //Multiply the high lanes of two 64x2 vectors.
-#define CLMUL_HI(a, b) vreinterpretq_u64_p128(vmull_high_p64(vreinterpretq_p64_u64(a), \
-                                                             vreinterpretq_p64_u64(b)))
+#define intrin_clmul_hi(a, b) vreinterpretq_u64_p128(vmull_high_p64(vreinterpretq_p64_u64(a), \
+                                                                    vreinterpretq_p64_u64(b)))
 
 //Multiply the low lanes of two 64x2 vectors.
 //It gets ugly.
 #ifndef _MSC_VER
-#define CLMUL_LO(a, b) vreinterpretq_u64_p128(vmull_p64(vgetq_lane_p64(vreinterpretq_p64_u64(a), 0), \
-                                                        vgetq_lane_p64(vreinterpretq_p64_u64(b), 0)))
+#define intrin_clmul_lo(a, b) vreinterpretq_u64_p128(vmull_p64(vgetq_lane_p64(vreinterpretq_p64_u64(a), 0), \
+                                                               vgetq_lane_p64(vreinterpretq_p64_u64(b), 0)))
 #else
-#define CLMUL_LO(a, b) vreinterpretq_u64_p128(vmull_p64(vreinterpret_p64_u64(vget_low_u64(a)), \
-                                                        vreinterpret_p64_u64(vget_low_u64(b))))
+#define intrin_clmul_lo(a, b) vreinterpretq_u64_p128(vmull_p64(vreinterpret_p64_u64(vget_low_u64(a)), \
+                                                               vreinterpret_p64_u64(vget_low_u64(b))))
 #endif
 
 //Swap the endianess of a 64x2 vector.
-#define SWAP(x) vreinterpretq_u64_u8(vqtbl1q_u8(vreinterpretq_u8_u64(x), vld1q_u8(SWAP_TABLE)))
+#define intrin_swap(x) vreinterpretq_u64_u8(vqtbl1q_u8(vreinterpretq_u8_u64(x), vld1q_u8(SWAP_TABLE)))
 
 //XOR two 64x2 vectors.
-#define XOR(a, b) veorq_u64(a, b)
+#define intrin_xor(a, b) veorq_u64(a, b)
 
 #else
-#error "Unsupported Architecture. Compile on X86-64 or aarch64 or use DISABLE_SIMD."
+#error "Unsupported Architecture. Compile on x86-64 or aarch64 or use DISABLE_SIMD."
 #endif
 
 #endif

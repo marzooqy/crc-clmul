@@ -11,13 +11,13 @@
     #elif __aarch64__
         #define TARGET_ATTRIBUTE __attribute__((target("+aes")))
     #else
-        #error "Unsupported Architecture. Compile on X86-64 or aarch64 or use DISABLE_SIMD."
+        #error "Unsupported Architecture. Compile on x86-64 or aarch64 or use DISABLE_SIMD."
     #endif
 #elif _MSC_VER
     #if defined(_M_AMD64) || defined(_M_ARM64)
         #define TARGET_ATTRIBUTE
     #else
-        #error "Unsupported Architecture. Compile on X86-64 or aarch64 or use DISABLE_SIMD."
+        #error "Unsupported Architecture. Compile on x86-64 or aarch64 or use DISABLE_SIMD."
     #endif
 #else
     #error "Unsupported Compiler. Use GCC, Clang, or MSVC."
@@ -391,10 +391,10 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
         uint128_t l1, l2, l3, l4;
 
         //Load 64 bytes from buf into the registers.
-        uint128_t b1 = LOAD(buf + 0x00);
-        uint128_t b2 = LOAD(buf + 0x10);
-        uint128_t b3 = LOAD(buf + 0x20);
-        uint128_t b4 = LOAD(buf + 0x30);
+        uint128_t b1 = intrin_load(buf);
+        uint128_t b2 = intrin_load(buf + 16);
+        uint128_t b3 = intrin_load(buf + 32);
+        uint128_t b4 = intrin_load(buf + 48);
 
         buf += 64;
         len -= 64;
@@ -402,41 +402,41 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
         if(params->refin) {
             //Reflected algorithm
             //Data alignment: [ax^0 bx^1 ... cx^n]
-            uint128_t c = SET(0, crc);
-            uint128_t k2k1 = SET(params->k2, params->k1);
+            uint128_t c = intrin_set(0, crc);
+            uint128_t k2k1 = intrin_set(params->k2, params->k1);
 
             //XOR with the init.
-            b1 = XOR(b1, c);
+            b1 = intrin_xor(b1, c);
 
             while(len >= 64) {
                 //Multiply by k1.
-                h1 = CLMUL_LO(b1, k2k1);
-                h2 = CLMUL_LO(b2, k2k1);
-                h3 = CLMUL_LO(b3, k2k1);
-                h4 = CLMUL_LO(b4, k2k1);
+                h1 = intrin_clmul_lo(b1, k2k1);
+                h2 = intrin_clmul_lo(b2, k2k1);
+                h3 = intrin_clmul_lo(b3, k2k1);
+                h4 = intrin_clmul_lo(b4, k2k1);
 
                 //Multiply by k2.
-                l1 = CLMUL_HI(b1, k2k1);
-                l2 = CLMUL_HI(b2, k2k1);
-                l3 = CLMUL_HI(b3, k2k1);
-                l4 = CLMUL_HI(b4, k2k1);
+                l1 = intrin_clmul_hi(b1, k2k1);
+                l2 = intrin_clmul_hi(b2, k2k1);
+                l3 = intrin_clmul_hi(b3, k2k1);
+                l4 = intrin_clmul_hi(b4, k2k1);
 
                 //Load the next chunk into the registers.
-                b1 = LOAD(buf + 0x00);
-                b2 = LOAD(buf + 0x10);
-                b3 = LOAD(buf + 0x20);
-                b4 = LOAD(buf + 0x30);
+                b1 = intrin_load(buf);
+                b2 = intrin_load(buf + 16);
+                b3 = intrin_load(buf + 32);
+                b4 = intrin_load(buf + 48);
 
                 //XOR.
-                b1 = XOR(b1, h1);
-                b2 = XOR(b2, h2);
-                b3 = XOR(b3, h3);
-                b4 = XOR(b4, h4);
+                b1 = intrin_xor(b1, h1);
+                b2 = intrin_xor(b2, h2);
+                b3 = intrin_xor(b3, h3);
+                b4 = intrin_xor(b4, h4);
 
-                b1 = XOR(b1, l1);
-                b2 = XOR(b2, l2);
-                b3 = XOR(b3, l3);
-                b4 = XOR(b4, l4);
+                b1 = intrin_xor(b1, l1);
+                b2 = intrin_xor(b2, l2);
+                b3 = intrin_xor(b3, l3);
+                b4 = intrin_xor(b4, l4);
 
                 buf += 64;
                 len -= 64;
@@ -445,63 +445,63 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
         } else {
             //Non-reflected algorithm
             //Data alignment: [ax^n bx^(n-1) ... cx^0]
-            uint128_t c = SET(crc, 0);
-            uint128_t k1k2 = SET(params->k1, params->k2);
+            uint128_t c = intrin_set(crc, 0);
+            uint128_t k1k2 = intrin_set(params->k1, params->k2);
 
             //Byte swap.
-            b1 = SWAP(b1);
-            b2 = SWAP(b2);
-            b3 = SWAP(b3);
-            b4 = SWAP(b4);
+            b1 = intrin_swap(b1);
+            b2 = intrin_swap(b2);
+            b3 = intrin_swap(b3);
+            b4 = intrin_swap(b4);
 
             //XOR the left side of buf with the initial value.
-            b1 = XOR(b1, c);
+            b1 = intrin_xor(b1, c);
 
             while(len >= 64) {
                 //Multiply by k1.
-                h1 = CLMUL_HI(b1, k1k2);
-                h2 = CLMUL_HI(b2, k1k2);
-                h3 = CLMUL_HI(b3, k1k2);
-                h4 = CLMUL_HI(b4, k1k2);
+                h1 = intrin_clmul_hi(b1, k1k2);
+                h2 = intrin_clmul_hi(b2, k1k2);
+                h3 = intrin_clmul_hi(b3, k1k2);
+                h4 = intrin_clmul_hi(b4, k1k2);
 
                 //Multiply by k2.
-                l1 = CLMUL_LO(b1, k1k2);
-                l2 = CLMUL_LO(b2, k1k2);
-                l3 = CLMUL_LO(b3, k1k2);
-                l4 = CLMUL_LO(b4, k1k2);
+                l1 = intrin_clmul_lo(b1, k1k2);
+                l2 = intrin_clmul_lo(b2, k1k2);
+                l3 = intrin_clmul_lo(b3, k1k2);
+                l4 = intrin_clmul_lo(b4, k1k2);
 
                 //Load the next chunk into the registers.
-                b1 = LOAD(buf + 0x00);
-                b2 = LOAD(buf + 0x10);
-                b3 = LOAD(buf + 0x20);
-                b4 = LOAD(buf + 0x30);
+                b1 = intrin_load(buf);
+                b2 = intrin_load(buf + 16);
+                b3 = intrin_load(buf + 32);
+                b4 = intrin_load(buf + 48);
 
                 //Byte swap.
-                b1 = SWAP(b1);
-                b2 = SWAP(b2);
-                b3 = SWAP(b3);
-                b4 = SWAP(b4);
+                b1 = intrin_swap(b1);
+                b2 = intrin_swap(b2);
+                b3 = intrin_swap(b3);
+                b4 = intrin_swap(b4);
 
                 //XOR.
-                b1 = XOR(b1, h1);
-                b2 = XOR(b2, h2);
-                b3 = XOR(b3, h3);
-                b4 = XOR(b4, h4);
+                b1 = intrin_xor(b1, h1);
+                b2 = intrin_xor(b2, h2);
+                b3 = intrin_xor(b3, h3);
+                b4 = intrin_xor(b4, h4);
 
-                b1 = XOR(b1, l1);
-                b2 = XOR(b2, l2);
-                b3 = XOR(b3, l3);
-                b4 = XOR(b4, l4);
+                b1 = intrin_xor(b1, l1);
+                b2 = intrin_xor(b2, l2);
+                b3 = intrin_xor(b3, l3);
+                b4 = intrin_xor(b4, l4);
 
                 buf += 64;
                 len -= 64;
             }
 
             //Byte swap.
-            b1 = SWAP(b1);
-            b2 = SWAP(b2);
-            b3 = SWAP(b3);
-            b4 = SWAP(b4);
+            b1 = intrin_swap(b1);
+            b2 = intrin_swap(b2);
+            b3 = intrin_swap(b3);
+            b4 = intrin_swap(b4);
         }
 
         //Calculate the CRC of what's left using the table-based algorithm.
@@ -570,13 +570,13 @@ static uint64_t multmodp_sw(params_t *params, uint64_t a, uint64_t b) {
 TARGET_ATTRIBUTE
 static uint64_t multmodp_hw(params_t *params, uint64_t a, uint64_t b) {
     //Load into two registers and multiply.
-    uint128_t ar = SET(0, a);
-    uint128_t br = SET(0, b);
+    uint128_t ar = intrin_set(0, a);
+    uint128_t br = intrin_set(0, b);
 
-    uint128_t prod = CLMUL_LO(ar, br);
+    uint128_t prod = intrin_clmul_lo(ar, br);
 
-    uint64_t hi = GET(prod, 1);
-    uint64_t lo = GET(prod, 0);
+    uint64_t hi = intrin_get(prod, 1);
+    uint64_t lo = intrin_get(prod, 0);
 
     //Shift to the left by 1.
     if(params->refin) {
