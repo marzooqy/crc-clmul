@@ -46,6 +46,12 @@ typedef __m128i uint128_t;
 //XOR two 128-bit integers.
 #define intrin_xor(a, b) _mm_xor_si128(a, b)
 
+//XOR three 128-bit integers.
+//Not a real tri-xor.
+#define intrin_tri_xor(a, b, c) _mm_xor_si128(a, _mm_xor_si128(b, c))
+
+//----------------------------------------
+
 #elif defined(__aarch64__) || defined(_M_ARM64)
 
 #include <arm_neon.h>
@@ -80,6 +86,10 @@ typedef uint64x2_t uint128_t;
 
 //XOR two 64x2 vectors.
 #define intrin_xor(a, b) veorq_u64(a, b)
+
+//XOR three 64x2 vectors.
+//Not a real tri-xor.
+#define intrin_tri_xor(a, b, c) veorq_u64(a, veorq_u64(b, c))
 
 #else
 #error "Unsupported Architecture. Compile on x86-64 or aarch64 or use DISABLE_SIMD."

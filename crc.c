@@ -428,15 +428,10 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
                 b4 = intrin_load(buf + 48);
 
                 //XOR.
-                b1 = intrin_xor(b1, h1);
-                b2 = intrin_xor(b2, h2);
-                b3 = intrin_xor(b3, h3);
-                b4 = intrin_xor(b4, h4);
-
-                b1 = intrin_xor(b1, l1);
-                b2 = intrin_xor(b2, l2);
-                b3 = intrin_xor(b3, l3);
-                b4 = intrin_xor(b4, l4);
+                b1 = intrin_tri_xor(b1, h1, l1);
+                b2 = intrin_tri_xor(b2, h2, l2);
+                b3 = intrin_tri_xor(b3, h3, l3);
+                b4 = intrin_tri_xor(b4, h4, l4);
 
                 buf += 64;
                 len -= 64;
@@ -483,15 +478,10 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
                 b4 = intrin_swap(b4);
 
                 //XOR.
-                b1 = intrin_xor(b1, h1);
-                b2 = intrin_xor(b2, h2);
-                b3 = intrin_xor(b3, h3);
-                b4 = intrin_xor(b4, h4);
-
-                b1 = intrin_xor(b1, l1);
-                b2 = intrin_xor(b2, l2);
-                b3 = intrin_xor(b3, l3);
-                b4 = intrin_xor(b4, l4);
+                b1 = intrin_tri_xor(b1, h1, l1);
+                b2 = intrin_tri_xor(b2, h2, l2);
+                b3 = intrin_tri_xor(b3, h3, l3);
+                b4 = intrin_tri_xor(b4, h4, l4);
 
                 buf += 64;
                 len -= 64;
