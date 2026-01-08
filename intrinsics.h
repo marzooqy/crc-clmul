@@ -47,13 +47,13 @@ typedef __m128i uint128_t;
 typedef uint64x2_t uint128_t;
 
 //Create a 64x2 vector from two 64-bit integers.
-#define SET(hi, lo) vsetq_lane_u64(hi, vsetq_lane_u64(lo, vdupq_n_u64(0), 0), 1)
+#define SET(hi, lo) vsetq_lane_u64(hi, vdupq_n_u64(lo), 1)
 
 //Extract a 64-bit integer from a 64x2 vector.
 #define GET(x, i) vgetq_lane_u64(x, i)
 
 //Load 16 bytes from ptr into a 64x2 vector.
-#define LOAD(ptr) vld1q_u64((uint64_t const*)(ptr))
+#define LOAD(ptr) vreinterpretq_u64_u8(vld1q_u8(ptr))
 
 //Multiply the high lanes of two 64x2 vectors.
 #define CLMUL_HI(a, b) vreinterpretq_u64_p128(vmull_high_p64(vreinterpretq_p64_u64(a), \
@@ -75,6 +75,8 @@ typedef uint64x2_t uint128_t;
 //XOR two 64x2 vectors.
 #define XOR(a, b) veorq_u64(a, b)
 
+#else
+#error "Unsupported Architecture. Compile on X86-64 or aarch64 or use DISABLE_SIMD."
 #endif
 
 #endif

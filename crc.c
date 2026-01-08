@@ -4,14 +4,24 @@
 #ifndef DISABLE_SIMD
 #include "cpu.h"
 #include "intrinsics.h"
-#endif
 
-#if defined(__GNUC__) && defined(__x86_64__)
-#define TARGET_ATTRIBUTE __attribute__((target("sse4.2,pclmul")))
-#elif defined(__GNUC__) && defined(__aarch64__)
-#define TARGET_ATTRIBUTE __attribute__((target("+aes")))
+#ifdef __GNUC__
+    #ifdef __x86_64__
+        #define TARGET_ATTRIBUTE __attribute__((target("sse4.2,pclmul")))
+    #elif __aarch64__
+        #define TARGET_ATTRIBUTE __attribute__((target("+aes")))
+    #else
+        #error "Unsupported Architecture. Compile on X86-64 or aarch64 or use DISABLE_SIMD."
+    #endif
+#elif _MSC_VER
+    #if defined(_M_AMD64) || defined(_M_ARM64)
+        #define TARGET_ATTRIBUTE
+    #else
+        #error "Unsupported Architecture. Compile on X86-64 or aarch64 or use DISABLE_SIMD."
+    #endif
 #else
-#define TARGET_ATTRIBUTE
+    #error "Unsupported Compiler. Use GCC, Clang, or MSVC."
+#endif
 #endif
 
 //----------------------------------------

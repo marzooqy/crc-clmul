@@ -88,6 +88,8 @@ static void _cpu_check_features() {
 #include <windows.h>
 #elif __APPLE__
 #include <sys/sysctl.h>
+#else
+#error "Unsupported OS. Compile on Android, Linux, Windows, MacOS, or iOS, or use DISABLE_SIMD."
 #endif
 
 static void _cpu_check_features() {
@@ -101,9 +103,13 @@ static void _cpu_check_features() {
     int val = 0;
     size_t len = sizeof(val);
     cpu_enable_simd = sysctlbyname("hw.optional.arm.FEAT_PMULL", &val, &len, 0, 0) == 0 && val != 0;
+    #else
+    #error "Unsupported OS. Compile on Android, Linux, Windows, MacOS, or iOS, or use DISABLE_SIMD."
     #endif
 }
 
+#else
+#error "Unsupported Architecture. Compile on X86-64 or aarch64 or use DISABLE_SIMD."
 #endif
 
 #endif
