@@ -3,7 +3,13 @@
 #ifndef INTRINSICS_H
 #define INTRINSICS_H
 
-const unsigned char SWAP_TABLE[] = {15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
+#ifndef _MSC_VER
+#define ALIGN_ARRAY __attribute__((aligned(16)))
+#else
+#define ALIGN_ARRAY __declspec(align(16))
+#endif
+
+const unsigned char ALIGN_ARRAY SWAP_TABLE[] = {15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
 
 #if defined(__x86_64__) || defined(_M_AMD64)
 
@@ -35,7 +41,7 @@ typedef __m128i uint128_t;
 #define CLMUL_LO(a, b) _mm_clmulepi64_si128(a, b, 0x00)
 
 //Swap the endianess of a 128-bit integer.
-#define SWAP(x) _mm_shuffle_epi8(x, _mm_loadu_si128((__m128i*)SWAP_TABLE))
+#define SWAP(x) _mm_shuffle_epi8(x, _mm_load_si128((__m128i*)SWAP_TABLE))
 
 //XOR two 128-bit integers.
 #define XOR(a, b) _mm_xor_si128(a, b)
