@@ -25,10 +25,11 @@ class params_t(ctypes.Structure):
                ('combine_table', ctypes.c_uint64 * 64)]
 
 _crc.cpu_check_features.argtypes = []
-_crc.cpu_check_features.restype = ctypes.c_int
 
 _crc.crc_params.argtypes = [ctypes.c_uint8, ctypes.c_uint64, ctypes.c_uint64, ctypes.c_bool, ctypes.c_bool, ctypes.c_uint64, ctypes.c_uint64, ctypes.POINTER(ctypes.c_uint8)]
 _crc.crc_params.restype = params_t
+
+_crc.crc_print_errors.argtypes = [ctypes.c_uint8]
 
 _crc.crc_table.argtypes = [ctypes.POINTER(params_t), ctypes.c_uint64, ctypes.c_char_p, ctypes.c_uint64]
 _crc.crc_table.restype = ctypes.c_uint64
@@ -53,6 +54,7 @@ def crc_params(width, poly, init, refin, refout, xorout, check):
     params = _crc.crc_params(width, poly, init, refin, refout, xorout, check, ctypes.byref(error))
 
     if error.value > 0:
+        _crc.crc_print_errors(error)
         raise ValueError('Invalid CRC parameters.')
 
     return params

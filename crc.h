@@ -32,14 +32,14 @@ params_t DLL_EXPORT crc_params(uint8_t width, uint64_t poly, uint64_t init, bool
 enum DLL_EXPORT crc_params_errors {
     CRC_WIDTH_NOT_SUPPORTED = 1,
     CRC_POLY_BIG = 2,
-    CRC_INIT_BIG = 3,
-    CRC_XOROUT_BIG = 4,
-    CRC_POLY_EVEN = 5,
-    CRC_CHECK_INVALID = 6
+    CRC_INIT_BIG = 4,
+    CRC_XOROUT_BIG = 8,
+    CRC_POLY_EVEN = 16,
+    CRC_CHECK_INVALID = 32
 };
 
-/* Print an error message depending on the error received from crc_params. */
-void DLL_EXPORT crc_print_error(uint8_t error);
+/* Print an error message depending on the errors emitted by crc_params. */
+void DLL_EXPORT crc_print_errors(uint8_t error);
 
 /* Calculate the CRC using the table-based algorithm.
    Use params.init as the initial CRC value.*/

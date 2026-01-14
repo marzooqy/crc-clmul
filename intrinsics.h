@@ -65,7 +65,7 @@ typedef uint64x2_t uint128_t;
 #define intrin_get(x, i) vgetq_lane_u64(x, i)
 
 //Load 16 bytes from ptr into a 64x2 vector.
-#define intrin_load(ptr) vreinterpretq_u64_u8(vld1q_u8(ptr))
+#define intrin_load(ptr) vld1q_u64((uint64_t*)(ptr))
 
 //Multiply the high lanes of two 64x2 vectors.
 #define intrin_clmul_hi(a, b) vreinterpretq_u64_p128(vmull_high_p64(vreinterpretq_p64_u64(a), \

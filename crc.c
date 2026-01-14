@@ -188,29 +188,23 @@ params_t crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, boo
     *error = 0;
 
     if(width < 2 || width > 64) {
-        *error = CRC_WIDTH_NOT_SUPPORTED;
+        *error |= CRC_WIDTH_NOT_SUPPORTED;
     }
 
     if(width < 64) {
         if(poly >> width) {
-            *error = CRC_POLY_BIG;
+            *error |= CRC_POLY_BIG;
         }
-
         if(init >> width) {
-            *error = CRC_INIT_BIG;
+            *error |= CRC_INIT_BIG;
         }
-
         if(xorout >> width) {
-            *error = CRC_XOROUT_BIG;
+            *error |= CRC_XOROUT_BIG;
         }
     }
 
     if((poly & 1) != 1) {
-        *error = CRC_POLY_EVEN;
-    }
-
-    if(*error != 0) {
-        return params;
+        *error |= CRC_POLY_EVEN;
     }
 
     params.width = width;
@@ -243,39 +237,31 @@ params_t crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, boo
 
     uint64_t crc = crc_table(&params, params.init, "123456789", 9);
     if(crc != check) {
-        *error = CRC_CHECK_INVALID;
+        *error |= CRC_CHECK_INVALID;
     }
 
     return params;
 }
 
-/* Print a readable error message for the error coming from crc_params. */
-void crc_print_error(uint8_t error) {
-    switch(error) {
-        case 0:
-            printf("CRC is valid.\n");
-            break;
-        case CRC_WIDTH_NOT_SUPPORTED:
-            printf("width should be larger than 1 and less than or equal to 64.\n");
-            break;
-        case CRC_POLY_BIG:
-            printf("poly width is larger than the width parameter.\n");
-            break;
-        case CRC_INIT_BIG:
-            printf("init width is larger than the width parameter.\n");
-            break;
-        case CRC_XOROUT_BIG:
-            printf("xorout width is larger than the width parameter.\n");
-            break;
-        case CRC_POLY_EVEN:
-            printf("CRC polynomial is even.\n");
-            break;
-        case CRC_CHECK_INVALID:
-            printf("check value doesn't match the CRC computed from the provided parameters.\n");
-            break;
-        default:
-            printf("Unknown error value.\n");
-            break;
+/* Print a readable error message for the errors coming from crc_params. */
+void crc_print_errors(uint8_t error) {
+    if(error & CRC_WIDTH_NOT_SUPPORTED) {
+        printf("width should be larger than 1 and less than or equal to 64.\n");
+    }
+    if(error & CRC_POLY_BIG) {
+        printf("poly width is larger than the width parameter.\n");
+    }
+    if(error & CRC_INIT_BIG) {
+        printf("init width is larger than the width parameter.\n");
+    }
+    if(error & CRC_XOROUT_BIG) {
+        printf("xorout width is larger than the width parameter.\n");
+    }
+    if (error & CRC_POLY_EVEN) {
+        printf("CRC polynomial is even.\n");
+    }
+    if(error & CRC_CHECK_INVALID) {
+        printf("check value doesn't match the CRC computed from the provided parameters.\n");
     }
 }
 
@@ -506,7 +492,7 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
 }
 #endif
 
-/* SIMD implementation of CRC. */
+/* SIMD implementation of CRC with software fallback. */
 uint64_t crc_calc(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len) {
     crc = crc_initial(params, crc);
 
@@ -579,7 +565,7 @@ static uint64_t multmodp_hw(params_t *params, uint64_t a, uint64_t b) {
 }
 #endif
 
-/* Chooses the version of multmodp to use based on the availability of
+/* Selects the version of multmodp to use based on the availability of
    hardware intrinsics.*/
 static uint64_t multmodp(params_t *params, uint64_t a, uint64_t b) {
     #ifndef DISABLE_SIMD
