@@ -15,39 +15,6 @@ void cpu_check_features() {}
 
 #else
 
-static void _cpu_check_features();
-
-//----------------------------------------
-
-/* Init once */
-
-#ifdef _WIN32
-
-#include <windows.h>
-
-static INIT_ONCE cpu_check_inited_once = INIT_ONCE_STATIC_INIT;
-
-static BOOL CALLBACK _cpu_check_features_forwarder(PINIT_ONCE once, PVOID param, PVOID* context) {
-    _cpu_check_features();
-    return TRUE;
-}
-
-void cpu_check_features() {
-    InitOnceExecuteOnce(&cpu_check_inited_once, _cpu_check_features_forwarder, NULL, NULL);
-}
-
-#else
-
-#include <pthread.h>
-
-static pthread_once_t cpu_check_inited_once = PTHREAD_ONCE_INIT;
-
-void cpu_check_features() {
-    pthread_once(&cpu_check_inited_once, _cpu_check_features);
-}
-
-#endif
-
 //----------------------------------------
 
 /* Check CPU features */
@@ -110,6 +77,37 @@ static void _cpu_check_features() {
 
 #else
 #error "Unsupported Architecture. Compile on x86-64 or aarch64 or use DISABLE_SIMD."
+#endif
+
+//----------------------------------------
+
+/* Init once */
+
+#ifdef _WIN32
+
+#include <windows.h>
+
+static INIT_ONCE cpu_check_inited_once = INIT_ONCE_STATIC_INIT;
+
+static BOOL CALLBACK _cpu_check_features_forwarder(PINIT_ONCE once, PVOID param, PVOID* context) {
+    _cpu_check_features();
+    return TRUE;
+}
+
+void cpu_check_features() {
+    InitOnceExecuteOnce(&cpu_check_inited_once, _cpu_check_features_forwarder, NULL, NULL);
+}
+
+#else
+
+#include <pthread.h>
+
+static pthread_once_t cpu_check_inited_once = PTHREAD_ONCE_INIT;
+
+void cpu_check_features() {
+    pthread_once(&cpu_check_inited_once, _cpu_check_features);
+}
+
 #endif
 
 #endif

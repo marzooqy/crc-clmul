@@ -377,10 +377,10 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
         uint128_t l1, l2, l3, l4;
 
         //Load 64 bytes from buf into the registers.
-        uint128_t b1 = intrin_load(buf);
-        uint128_t b2 = intrin_load(buf + 16);
-        uint128_t b3 = intrin_load(buf + 32);
-        uint128_t b4 = intrin_load(buf + 48);
+        uint128_t b1 = intrin_load_le(buf);
+        uint128_t b2 = intrin_load_le(buf + 16);
+        uint128_t b3 = intrin_load_le(buf + 32);
+        uint128_t b4 = intrin_load_le(buf + 48);
 
         buf += 64;
         len -= 64;
@@ -408,10 +408,10 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
                 l4 = intrin_clmul_hi(b4, k2k1);
 
                 //Load the next chunk into the registers.
-                b1 = intrin_load(buf);
-                b2 = intrin_load(buf + 16);
-                b3 = intrin_load(buf + 32);
-                b4 = intrin_load(buf + 48);
+                b1 = intrin_load_le(buf);
+                b2 = intrin_load_le(buf + 16);
+                b3 = intrin_load_le(buf + 32);
+                b4 = intrin_load_le(buf + 48);
 
                 //XOR.
                 b1 = intrin_tri_xor(b1, h1, l1);
@@ -452,16 +452,10 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
                 l4 = intrin_clmul_lo(b4, k1k2);
 
                 //Load the next chunk into the registers.
-                b1 = intrin_load(buf);
-                b2 = intrin_load(buf + 16);
-                b3 = intrin_load(buf + 32);
-                b4 = intrin_load(buf + 48);
-
-                //Byte swap.
-                b1 = intrin_swap(b1);
-                b2 = intrin_swap(b2);
-                b3 = intrin_swap(b3);
-                b4 = intrin_swap(b4);
+                b1 = intrin_load_bg(buf);
+                b2 = intrin_load_bg(buf + 16);
+                b3 = intrin_load_bg(buf + 32);
+                b4 = intrin_load_bg(buf + 48);
 
                 //XOR.
                 b1 = intrin_tri_xor(b1, h1, l1);
