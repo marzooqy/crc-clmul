@@ -514,21 +514,30 @@ static uint64_t multmodp_sw(params_t *params, uint64_t a, uint64_t b) {
     uint64_t lo = 0;
 
     //a * b.
-    if(a & 1) {
-        lo ^= b;
-    }
-
-    for(uint8_t i = 1; i < 64; i++) {
-        if((a >> i) & 1) {
-            hi ^= b >> (64 - i);
-            lo ^= b << i;
-        }
-    }
-
-    //Shift to the left by 1 to account for reflection (Intel paper p20).
     if(params->refin) {
-        hi = (hi << 1) | (lo >> 63);
-        lo <<= 1;
+        const uint64_t mask = (uint64_t)1 << 63;
+        if(a & mask) {
+            hi ^= b;
+        }
+
+        for(uint8_t i = 1; i < 64; i++) {
+            if((a << i) & mask) {
+                hi ^= b >> i;
+                lo ^= b << (64 - i);
+            }
+        }
+
+    } else {
+        if(a & 1) {
+            lo ^= b;
+        }
+
+        for(uint8_t i = 1; i < 64; i++) {
+            if((a >> i) & 1) {
+                hi ^= b >> (64 - i);
+                lo ^= b << i;
+            }
+        }
     }
 
     //mod p.
@@ -548,7 +557,7 @@ static uint64_t multmodp_hw(params_t *params, uint64_t a, uint64_t b) {
     uint64_t hi = intrin_get(prod, 1);
     uint64_t lo = intrin_get(prod, 0);
 
-    //Shift to the left by 1.
+    //Shift to the left by 1 to account for reflection (Intel paper p20).
     if(params->refin) {
         hi = (hi << 1) | (lo >> 63);
         lo <<= 1;
