@@ -30,7 +30,6 @@
 
 static uint64_t reflect(uint64_t x, uint8_t w);
 static uint64_t xnmodp(params_t *params, uint16_t n);
-static uint64_t modp(params_t *params, uint64_t hi, uint64_t lo);
 static uint64_t crc_initial(params_t *params, uint64_t crc);
 static uint64_t crc_final(params_t *params, uint64_t crc);
 static uint64_t crc_bytes(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len);
@@ -104,21 +103,6 @@ static uint64_t xnmodp(params_t *params, uint16_t n) {
     return mod;
 }
 
-/* Computes mod p from a 128-bits integer using the CRC table. Assumes a 64-bit
-   polynomial. */
-static uint64_t modp(params_t *params, uint64_t hi, uint64_t lo) {
-    if(params->refin) {
-        for(uint8_t i = 0; i < 8; i++) {
-            lo = (lo >> 8) ^ params->table[lo & 0xff];
-        }
-    } else {
-        for(uint8_t i = 0; i < 8; i++) {
-            hi = (hi << 8) ^ params->table[hi >> 56];
-        }
-    }
-    return hi ^ lo;
-}
-
 //----------------------------------------
 
 /* params_t constructor */
@@ -187,7 +171,7 @@ params_t crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, boo
     params_t params;
     *error = 0;
 
-    if(width < 2 || width > 64) {
+    if(width == 0 || width > 64) {
         *error |= CRC_WIDTH_NOT_SUPPORTED;
     }
 
@@ -246,7 +230,7 @@ params_t crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, boo
 /* Print a readable error message for the errors coming from crc_params. */
 void crc_print_errors(uint8_t error) {
     if(error & CRC_WIDTH_NOT_SUPPORTED) {
-        printf("width should be larger than 1 and less than or equal to 64.\n");
+        printf("width should be larger than 0 and less than or equal to 64.\n");
     }
     if(error & CRC_POLY_BIG) {
         printf("poly width is larger than the width parameter.\n");
@@ -508,43 +492,37 @@ uint64_t crc_calc(params_t *params, uint64_t crc, unsigned char const *buf, uint
 
 /* CRC combine functions */
 
-/* Computes (a * b) mod p. */
+/* Branchless version of the ternary operator. Assumes that all arguments have
+   the same type. c should be 1 or 0. */
+#define ternary(c, a, b) ((-(c) & (a)) | (((c) - 1) & (b)))
+
+/* Adler's multmodp. Computes (a * b) mod p.
+   a*b mod p = sum(b * a[i] * x*i  mod p) for i = 0...63 */
 static uint64_t multmodp_sw(params_t *params, uint64_t a, uint64_t b) {
-    uint64_t hi = 0;
-    uint64_t lo = 0;
+    uint64_t prod;
 
-    //a * b.
     if(params->refin) {
-        const uint64_t mask = (uint64_t)1 << 63;
-        if(a & mask) {
-            hi ^= b;
-        }
-
-        for(uint8_t i = 1; i < 64; i++) {
-            if((a << i) & mask) {
-                hi ^= b >> i;
-                lo ^= b << (64 - i);
-            }
+        prod = ternary(a >> 63, b, 0);
+        while(a) {
+            a <<= 1;
+            b = (b >> 1) ^ ternary(b & 1, params->poly, 0);
+            prod ^= ternary(a >> 63, b, 0);
         }
 
     } else {
-        if(a & 1) {
-            lo ^= b;
-        }
-
-        for(uint8_t i = 1; i < 64; i++) {
-            if((a >> i) & 1) {
-                hi ^= b >> (64 - i);
-                lo ^= b << i;
-            }
+        prod = ternary(a & 1, b, 0);
+        while(a) {
+            a >>= 1;
+            b = (b << 1) ^ ternary(b >> 63, params->poly, 0);
+            prod ^= ternary(a & 1, b, 0);
         }
     }
 
-    //mod p.
-    return modp(params, hi, lo);
+    return prod;
 }
 
-/* Hardware version of multmodp. */
+/* Hardware version of multmodp. Multiplies a and b using the CLMUL intrinsic
+   and finds the modulos using the CRC table. */
 #ifndef DISABLE_SIMD
 TARGET_ATTRIBUTE
 static uint64_t multmodp_hw(params_t *params, uint64_t a, uint64_t b) {
@@ -561,10 +539,17 @@ static uint64_t multmodp_hw(params_t *params, uint64_t a, uint64_t b) {
     if(params->refin) {
         hi = (hi << 1) | (lo >> 63);
         lo <<= 1;
+        for(uint8_t i = 0; i < 8; i++) {
+            lo = (lo >> 8) ^ params->table[lo & 0xff];
+        }
+
+    } else {
+        for(uint8_t i = 0; i < 8; i++) {
+            hi = (hi << 8) ^ params->table[hi >> 56];
+        }
     }
 
-    //mod p.
-    return modp(params, hi, lo);
+    return hi ^ lo;
 }
 #endif
 
