@@ -343,128 +343,130 @@ uint64_t crc_table(params_t *params, uint64_t crc, unsigned char const *buf, uin
 #ifndef DISABLE_SIMD
 TARGET_ATTRIBUTE
 static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len) {
-    //Align to a 16 byte memory boundary.
-    uint64_t adrs = (uintptr_t)buf & 0xf;
-    if(adrs) {
-        uint64_t rem = 16 - adrs;
-        crc = crc_bytes(params, crc, buf, rem);
-        buf += rem;
-        len -= rem;
-    }
-
-    #ifdef DEBUG
-    assert(((uintptr_t)buf & 0xf) == 0);
-    #endif
-
     if(len >= 128) {
-        //After every multiplication the result is split into an upper and
-        //lower half to avoid overflowing the register (Intel paper p8-9).
-        uint128_t h1, h2, h3, h4;
-        uint128_t l1, l2, l3, l4;
-
-        //Load 64 bytes from buf into the registers.
-        uint128_t b1 = intrin_load_le(buf);
-        uint128_t b2 = intrin_load_le(buf + 16);
-        uint128_t b3 = intrin_load_le(buf + 32);
-        uint128_t b4 = intrin_load_le(buf + 48);
-
-        buf += 64;
-        len -= 64;
-
-        if(params->refin) {
-            //Reflected algorithm
-            //Data alignment: [ax^0 bx^1 ... cx^n]
-            uint128_t c = intrin_set(0, crc);
-            uint128_t k2k1 = intrin_set(params->k2, params->k1);
-
-            //XOR with the init.
-            b1 = intrin_xor(b1, c);
-
-            while(len >= 64) {
-                //Multiply by k1.
-                h1 = intrin_clmul_lo(b1, k2k1);
-                h2 = intrin_clmul_lo(b2, k2k1);
-                h3 = intrin_clmul_lo(b3, k2k1);
-                h4 = intrin_clmul_lo(b4, k2k1);
-
-                //Multiply by k2.
-                l1 = intrin_clmul_hi(b1, k2k1);
-                l2 = intrin_clmul_hi(b2, k2k1);
-                l3 = intrin_clmul_hi(b3, k2k1);
-                l4 = intrin_clmul_hi(b4, k2k1);
-
-                //Load the next chunk into the registers.
-                b1 = intrin_load_le(buf);
-                b2 = intrin_load_le(buf + 16);
-                b3 = intrin_load_le(buf + 32);
-                b4 = intrin_load_le(buf + 48);
-
-                //XOR.
-                b1 = intrin_tri_xor(b1, h1, l1);
-                b2 = intrin_tri_xor(b2, h2, l2);
-                b3 = intrin_tri_xor(b3, h3, l3);
-                b4 = intrin_tri_xor(b4, h4, l4);
-
-                buf += 64;
-                len -= 64;
-            }
-
-        } else {
-            //Non-reflected algorithm
-            //Data alignment: [ax^n bx^(n-1) ... cx^0]
-            uint128_t c = intrin_set(crc, 0);
-            uint128_t k1k2 = intrin_set(params->k1, params->k2);
-
-            //Byte swap.
-            b1 = intrin_swap(b1);
-            b2 = intrin_swap(b2);
-            b3 = intrin_swap(b3);
-            b4 = intrin_swap(b4);
-
-            //XOR the left side of buf with the initial value.
-            b1 = intrin_xor(b1, c);
-
-            while(len >= 64) {
-                //Multiply by k1.
-                h1 = intrin_clmul_hi(b1, k1k2);
-                h2 = intrin_clmul_hi(b2, k1k2);
-                h3 = intrin_clmul_hi(b3, k1k2);
-                h4 = intrin_clmul_hi(b4, k1k2);
-
-                //Multiply by k2.
-                l1 = intrin_clmul_lo(b1, k1k2);
-                l2 = intrin_clmul_lo(b2, k1k2);
-                l3 = intrin_clmul_lo(b3, k1k2);
-                l4 = intrin_clmul_lo(b4, k1k2);
-
-                //Load the next chunk into the registers.
-                b1 = intrin_load_bg(buf);
-                b2 = intrin_load_bg(buf + 16);
-                b3 = intrin_load_bg(buf + 32);
-                b4 = intrin_load_bg(buf + 48);
-
-                //XOR.
-                b1 = intrin_tri_xor(b1, h1, l1);
-                b2 = intrin_tri_xor(b2, h2, l2);
-                b3 = intrin_tri_xor(b3, h3, l3);
-                b4 = intrin_tri_xor(b4, h4, l4);
-
-                buf += 64;
-                len -= 64;
-            }
-
-            //Byte swap.
-            b1 = intrin_swap(b1);
-            b2 = intrin_swap(b2);
-            b3 = intrin_swap(b3);
-            b4 = intrin_swap(b4);
+        //Align to a 16 byte memory boundary.
+        uint64_t adrs = (uintptr_t)buf & 0xf;
+        if(adrs) {
+            uint64_t rem = 16 - adrs;
+            crc = crc_bytes(params, crc, buf, rem);
+            buf += rem;
+            len -= rem;
         }
 
-        //Calculate the CRC of what's left using the table-based algorithm.
-        crc = crc_bytes(params, 0, (unsigned char*) &b1, 16);
-        crc = crc_bytes(params, crc, (unsigned char*) &b2, 16);
-        crc = crc_bytes(params, crc, (unsigned char*) &b3, 16);
-        crc = crc_bytes(params, crc, (unsigned char*) &b4, 16);
+        #ifdef DEBUG
+        assert(((uintptr_t)buf & 0xf) == 0);
+        #endif
+
+        if(len >= 128) {
+            //After every multiplication the result is split into an upper and
+            //lower half to avoid overflowing the register (Intel paper p8-9).
+            uint128_t h1, h2, h3, h4;
+            uint128_t l1, l2, l3, l4;
+
+            //Load 64 bytes from buf into the registers.
+            uint128_t b1 = intrin_load_le(buf);
+            uint128_t b2 = intrin_load_le(buf + 16);
+            uint128_t b3 = intrin_load_le(buf + 32);
+            uint128_t b4 = intrin_load_le(buf + 48);
+
+            buf += 64;
+            len -= 64;
+
+            if(params->refin) {
+                //Reflected algorithm
+                //Data alignment: [ax^0 bx^1 ... cx^n]
+                uint128_t c = intrin_set(0, crc);
+                uint128_t k2k1 = intrin_set(params->k2, params->k1);
+
+                //XOR with the init.
+                b1 = intrin_xor(b1, c);
+
+                while(len >= 64) {
+                    //Multiply by k1.
+                    h1 = intrin_clmul_lo(b1, k2k1);
+                    h2 = intrin_clmul_lo(b2, k2k1);
+                    h3 = intrin_clmul_lo(b3, k2k1);
+                    h4 = intrin_clmul_lo(b4, k2k1);
+
+                    //Multiply by k2.
+                    l1 = intrin_clmul_hi(b1, k2k1);
+                    l2 = intrin_clmul_hi(b2, k2k1);
+                    l3 = intrin_clmul_hi(b3, k2k1);
+                    l4 = intrin_clmul_hi(b4, k2k1);
+
+                    //Load the next chunk into the registers.
+                    b1 = intrin_load_le(buf);
+                    b2 = intrin_load_le(buf + 16);
+                    b3 = intrin_load_le(buf + 32);
+                    b4 = intrin_load_le(buf + 48);
+
+                    //XOR.
+                    b1 = intrin_tri_xor(b1, h1, l1);
+                    b2 = intrin_tri_xor(b2, h2, l2);
+                    b3 = intrin_tri_xor(b3, h3, l3);
+                    b4 = intrin_tri_xor(b4, h4, l4);
+
+                    buf += 64;
+                    len -= 64;
+                }
+
+            } else {
+                //Non-reflected algorithm
+                //Data alignment: [ax^n bx^(n-1) ... cx^0]
+                uint128_t c = intrin_set(crc, 0);
+                uint128_t k1k2 = intrin_set(params->k1, params->k2);
+
+                //Byte swap.
+                b1 = intrin_swap(b1);
+                b2 = intrin_swap(b2);
+                b3 = intrin_swap(b3);
+                b4 = intrin_swap(b4);
+
+                //XOR the left side of buf with the initial value.
+                b1 = intrin_xor(b1, c);
+
+                while(len >= 64) {
+                    //Multiply by k1.
+                    h1 = intrin_clmul_hi(b1, k1k2);
+                    h2 = intrin_clmul_hi(b2, k1k2);
+                    h3 = intrin_clmul_hi(b3, k1k2);
+                    h4 = intrin_clmul_hi(b4, k1k2);
+
+                    //Multiply by k2.
+                    l1 = intrin_clmul_lo(b1, k1k2);
+                    l2 = intrin_clmul_lo(b2, k1k2);
+                    l3 = intrin_clmul_lo(b3, k1k2);
+                    l4 = intrin_clmul_lo(b4, k1k2);
+
+                    //Load the next chunk into the registers.
+                    b1 = intrin_load_bg(buf);
+                    b2 = intrin_load_bg(buf + 16);
+                    b3 = intrin_load_bg(buf + 32);
+                    b4 = intrin_load_bg(buf + 48);
+
+                    //XOR.
+                    b1 = intrin_tri_xor(b1, h1, l1);
+                    b2 = intrin_tri_xor(b2, h2, l2);
+                    b3 = intrin_tri_xor(b3, h3, l3);
+                    b4 = intrin_tri_xor(b4, h4, l4);
+
+                    buf += 64;
+                    len -= 64;
+                }
+
+                //Byte swap.
+                b1 = intrin_swap(b1);
+                b2 = intrin_swap(b2);
+                b3 = intrin_swap(b3);
+                b4 = intrin_swap(b4);
+            }
+
+            //Calculate the CRC of what's left using the table-based algorithm.
+            crc = crc_bytes(params, 0, (unsigned char*) &b1, 16);
+            crc = crc_bytes(params, crc, (unsigned char*) &b2, 16);
+            crc = crc_bytes(params, crc, (unsigned char*) &b3, 16);
+            crc = crc_bytes(params, crc, (unsigned char*) &b4, 16);
+        }
     }
 
     //Compute the remaining bytes and return the CRC.
