@@ -62,4 +62,9 @@ uint64_t DLL_EXPORT crc_combine_fixed(params_t *params, uint64_t crc, uint64_t c
 /* Combine two CRCs. len is the length of the second CRC's message. */
 uint64_t DLL_EXPORT crc_combine(params_t *params, uint64_t crc, uint64_t crc2, uint64_t len);
 
+/* Bit-length functions. */
+uint64_t DLL_EXPORT crc_calc_bits(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len);
+uint64_t DLL_EXPORT crc_combine_constant_bits(params_t *params, uint64_t len);
+uint64_t DLL_EXPORT crc_combine_bits(params_t *params, uint64_t crc, uint64_t crc2, uint64_t len);
+
 #endif

@@ -6,21 +6,21 @@
 #include "intrinsics.h"
 
 #ifdef __GNUC__
-    #ifdef __x86_64__
-        #define TARGET_ATTRIBUTE __attribute__((target("sse4.2,pclmul")))
-    #elif __aarch64__
-        #define TARGET_ATTRIBUTE __attribute__((target("+aes")))
-    #else
-        #error "Unsupported Architecture. Compile on x86-64 or aarch64 or use DISABLE_SIMD."
-    #endif
-#elif _MSC_VER
-    #if defined(_M_AMD64) || defined(_M_ARM64)
-        #define TARGET_ATTRIBUTE
-    #else
-        #error "Unsupported Architecture. Compile on x86-64 or aarch64 or use DISABLE_SIMD."
-    #endif
+#ifdef __x86_64__
+    #define TARGET_ATTRIBUTE __attribute__((target("sse4.2,pclmul")))
+#elif __aarch64__
+    #define TARGET_ATTRIBUTE __attribute__((target("+aes")))
 #else
-    #error "Unsupported Compiler. Use GCC, Clang, or MSVC."
+    #error "Unsupported Architecture. Compile on x86-64 or aarch64 or use DISABLE_SIMD."
+#endif
+#elif _MSC_VER
+#if defined(_M_AMD64) || defined(_M_ARM64)
+    #define TARGET_ATTRIBUTE
+#else
+    #error "Unsupported Architecture. Compile on x86-64 or aarch64 or use DISABLE_SIMD."
+#endif
+#else
+#error "Unsupported Compiler. Use GCC, Clang, or MSVC."
 #endif
 #endif
 
@@ -32,6 +32,7 @@ static uint64_t reflect(uint64_t x, uint8_t w);
 static uint64_t xnmodp(params_t *params, uint16_t n);
 static uint64_t crc_initial(params_t *params, uint64_t crc);
 static uint64_t crc_final(params_t *params, uint64_t crc);
+static uint64_t crc_bits(params_t *params, uint64_t crc, uint8_t byte, uint8_t len);
 static uint64_t crc_bytes(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len);
 static uint64_t multmodp_sw(params_t *params, uint64_t a, uint64_t b);
 static uint64_t multmodp(params_t *params, uint64_t a, uint64_t b);
@@ -72,7 +73,10 @@ static void print_hex128(uint128_t n) {
 
 /* Bit manipulation and math functions */
 
-/* Reflects an integer x of width w */
+/* Converts a boolean into an AND mask. */
+#define and_mask(c) (-(uint64_t)(c))
+
+/* Reflects an integer x of width w. */
 static uint64_t reflect(uint64_t x, uint8_t w) {
     x = ((x >> 32) & 0xffffffff) | ((x << 32) & 0xffffffff00000000);
     x = ((x >> 16) & 0xffff0000ffff) | ((x << 16) & 0xffff0000ffff0000);
@@ -91,12 +95,11 @@ static uint64_t xnmodp(params_t *params, uint16_t n) {
 
     if(params->refin) {
         while(n-- > 64) {
-            mod = mod & 1 ? (mod >> 1) ^ params->poly : mod >> 1;
+            mod = (mod >> 1) ^ (params->poly & and_mask(mod & 1));
         }
     } else {
-        const uint64_t mask = (uint64_t)1 << 63;
         while(n-- > 64) {
-            mod = mod & mask ? (mod << 1) ^ params->poly : mod << 1;
+            mod = (mod << 1) ^ (params->poly & and_mask(mod >> 63));
         }
     }
 
@@ -290,13 +293,12 @@ static void crc_build_table(params_t *params) {
 
         if(params->refin) {
             for(uint8_t j = 0; j < 8; j++) {
-                crc = crc & 1 ? (crc >> 1) ^ params->poly : crc >> 1;
+                crc = (crc >> 1) ^ (params->poly & and_mask(crc & 1));
             }
         } else {
-            const uint64_t mask = (uint64_t)1 << 63;
             crc <<= 56;
             for(uint8_t j = 0; j < 8; j++) {
-                crc = crc & mask ? (crc << 1) ^ params->poly : crc << 1;
+                crc = (crc << 1) ^ (params->poly & and_mask(crc >> 63));
             }
         }
         params->table[i] = crc;
@@ -492,29 +494,25 @@ uint64_t crc_calc(params_t *params, uint64_t crc, unsigned char const *buf, uint
 
 /* CRC combine functions */
 
-/* Branchless version of the ternary operator. Assumes that all arguments have
-   the same type. c should be 1 or 0. */
-#define ternary(c, a, b) ((-(c) & (a)) | (((c) - 1) & (b)))
-
 /* Adler's multmodp. Computes (a * b) mod p.
    a*b mod p = sum(b * a[i] * x*i  mod p) for i = 0...63 */
 static uint64_t multmodp_sw(params_t *params, uint64_t a, uint64_t b) {
     uint64_t prod;
 
     if(params->refin) {
-        prod = ternary(a >> 63, b, 0);
+        prod = b & and_mask(a >> 63);
         while(a) {
             a <<= 1;
-            b = (b >> 1) ^ ternary(b & 1, params->poly, 0);
-            prod ^= ternary(a >> 63, b, 0);
+            b = (b >> 1) ^ (params->poly & and_mask(b & 1));
+            prod ^= b & and_mask(a >> 63);
         }
 
     } else {
-        prod = ternary(a & 1, b, 0);
+        prod = b & and_mask(a & 1);
         while(a) {
             a >>= 1;
-            b = (b << 1) ^ ternary(b >> 63, params->poly, 0);
-            prod ^= ternary(a & 1, b, 0);
+            b = (b << 1) ^ (params->poly & and_mask(b >> 63));
+            prod ^= b & and_mask(a & 1);
         }
     }
 
@@ -612,7 +610,7 @@ uint64_t crc_combine_fixed(params_t *params, uint64_t crc, uint64_t crc2, uint64
 }
 
 /* Mark Adler's O(log n) combine algorithm. Use this if the length of the second
-   CRC is variable.*/
+   CRC is variable. */
 uint64_t crc_combine(params_t *params, uint64_t crc, uint64_t crc2, uint64_t len) {
     crc ^= params->init ^ params->xorout;
     crc = crc_initial(params, crc);
@@ -627,5 +625,87 @@ uint64_t crc_combine(params_t *params, uint64_t crc, uint64_t crc2, uint64_t len
         i++;
     }
 
+    return crc_final(params, crc ^ crc2);
+}
+
+//----------------------------------------
+
+/* Bit-length CRC functions */
+/* Equivalent functions where the length is specified in bits. */
+
+/* Computes the CRC of up to 8 bits using the tableless algorithm. */
+static uint64_t crc_bits(params_t *params, uint64_t crc, uint8_t byte, uint8_t len) {
+    if(params->refin) {
+        uint8_t mask = (uint8_t)-1 >> (8 - len);
+        crc ^= byte & mask;
+        while(len--) {
+            crc = (crc >> 1) ^ (params->poly & and_mask(crc & 1));
+        }
+    } else {
+        uint8_t mask = (uint8_t)-1 << (8 - len);
+        crc ^= (uint64_t)(byte & mask) << 56;
+        while(len--) {
+            crc = (crc << 1) ^ (params->poly & and_mask(crc >> 63));
+        }
+    }
+    return crc;
+}
+
+uint64_t crc_calc_bits(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len) {
+    uint64_t bytes = len / 8;
+    uint8_t bits = len % 8;
+
+    crc = crc_initial(params, crc);
+
+    #ifndef DISABLE_SIMD
+    if(cpu_enable_simd) {
+        crc = crc_clmul(params, crc, buf, bytes);
+    } else {
+        crc = crc_bytes(params, crc, buf, bytes);
+    }
+
+    #else
+    crc = crc_bytes(params, crc, buf, bytes);
+    #endif
+
+    crc = crc_bits(params, crc, *(buf + bytes), bits);
+    return crc_final(params, crc);
+}
+
+uint64_t crc_combine_constant_bits(params_t *params, uint64_t len) {
+    uint64_t bytes = len / 8;
+    uint8_t bits = len % 8;
+
+    uint64_t xp = params->refin ? (uint64_t)1 << 63 : 1;
+    uint8_t i = 0;
+    while(bytes) {
+        if(bytes & 1) {
+            xp = multmodp(params, xp, params->combine_table[i]);
+        }
+        bytes >>= 1;
+        i++;
+    }
+
+    return crc_bits(params, xp, 0, bits);
+}
+
+uint64_t crc_combine_bits(params_t *params, uint64_t crc, uint64_t crc2, uint64_t len) {
+    uint64_t bytes = len / 8;
+    uint8_t bits = len % 8;
+
+    crc ^= params->init ^ params->xorout;
+    crc = crc_initial(params, crc);
+    crc2 = crc_initial(params, crc2);
+
+    uint8_t i = 0;
+    while(bytes) {
+        if(bytes & 1) {
+            crc = multmodp(params, crc, params->combine_table[i]);
+        }
+        bytes >>= 1;
+        i++;
+    }
+
+    crc = crc_bits(params, crc, 0, bits);
     return crc_final(params, crc ^ crc2);
 }
