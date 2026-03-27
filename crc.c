@@ -585,15 +585,28 @@ static void crc_build_combine_table(params_t *params) {
    can be precomputed once and reused in conjunction with crc_combine_fixed
    if the length of the second CRC's message is always the same. */
 uint64_t crc_combine_constant(params_t *params, uint64_t len) {
-    uint64_t xp = params->refin ? (uint64_t)1 << 63 : 1; //x^0
+    if(len == 0) {
+        return params->refin ? (uint64_t)1 << 63 : 1;
+    }
+
+    uint64_t xp;
     uint8_t i = 0;
-    while(len) {
-        if(len & 1) {
-            xp = multmodp(params, xp, params->combine_table[i]);
-        }
+
+    while((len & 1) == 0) {
         len >>= 1;
         i++;
     }
+
+    xp = params->combine_table[i];
+
+    while(len) {
+        len >>= 1;
+        i++;
+        if(len & 1) {
+            xp = multmodp(params, xp, params->combine_table[i]);
+        }
+    }
+
     return xp;
 }
 
@@ -611,23 +624,9 @@ uint64_t crc_combine_fixed(params_t *params, uint64_t crc, uint64_t crc2, uint64
     return crc_final(params, crc);
 }
 
-/* Mark Adler's O(log n) combine algorithm. Use this if the length of the second
-   CRC is variable. */
+/* Same as crc_combine_fixed but the combine constant is computed in real-time. */
 uint64_t crc_combine(params_t *params, uint64_t crc, uint64_t crc2, uint64_t len) {
-    crc ^= params->init ^ params->xorout;
-    crc = crc_initial(params, crc);
-    crc2 = crc_initial(params, crc2);
-
-    uint8_t i = 0;
-    while(len) {
-        if(len & 1) {
-            crc = multmodp(params, crc, params->combine_table[i]);
-        }
-        len >>= 1;
-        i++;
-    }
-
-    return crc_final(params, crc ^ crc2);
+    return crc_combine_fixed(params, crc, crc2, crc_combine_constant(params, len));
 }
 
 //----------------------------------------
@@ -675,39 +674,10 @@ uint64_t crc_calc_bits(params_t *params, uint64_t crc, unsigned char const *buf,
 }
 
 uint64_t crc_combine_constant_bits(params_t *params, uint64_t len) {
-    uint64_t bytes = len / 8;
-    uint8_t bits = len % 8;
-
-    uint64_t xp = params->refin ? (uint64_t)1 << 63 : 1;
-    uint8_t i = 0;
-    while(bytes) {
-        if(bytes & 1) {
-            xp = multmodp(params, xp, params->combine_table[i]);
-        }
-        bytes >>= 1;
-        i++;
-    }
-
-    return crc_bits(params, xp, 0, bits);
+    uint64_t xp = crc_combine_constant(params, len / 8);
+    return crc_bits(params, xp, 0, len % 8);
 }
 
 uint64_t crc_combine_bits(params_t *params, uint64_t crc, uint64_t crc2, uint64_t len) {
-    uint64_t bytes = len / 8;
-    uint8_t bits = len % 8;
-
-    crc ^= params->init ^ params->xorout;
-    crc = crc_initial(params, crc);
-    crc2 = crc_initial(params, crc2);
-
-    uint8_t i = 0;
-    while(bytes) {
-        if(bytes & 1) {
-            crc = multmodp(params, crc, params->combine_table[i]);
-        }
-        bytes >>= 1;
-        i++;
-    }
-
-    crc = crc_bits(params, crc, 0, bits);
-    return crc_final(params, crc ^ crc2);
+    return crc_combine_fixed(params, crc, crc2, crc_combine_constant_bits(params, len));
 }
