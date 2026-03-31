@@ -305,6 +305,24 @@ static void crc_build_table(params_t *params) {
     }
 }
 
+/* Computes the CRC of up to 8 bits using the tableless algorithm. */
+static uint64_t crc_bits(params_t *params, uint64_t crc, uint8_t byte, uint8_t len) {
+    if(params->refin) {
+        uint8_t mask = (uint8_t)-1 >> (8 - len);
+        crc ^= byte & mask;
+        while(len--) {
+            crc = (crc >> 1) ^ (params->poly & and_mask(crc & 1));
+        }
+    } else {
+        uint8_t mask = (uint8_t)-1 << (8 - len);
+        crc ^= (uint64_t)(byte & mask) << 56;
+        while(len--) {
+            crc = (crc << 1) ^ (params->poly & and_mask(crc >> 63));
+        }
+    }
+    return crc;
+}
+
 /* Compute the CRC byte-by-byte using the lookup table. */
 static uint64_t crc_bytes(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len) {
     if(params->refin) {
@@ -492,6 +510,28 @@ uint64_t crc_calc(params_t *params, uint64_t crc, unsigned char const *buf, uint
     return crc_final(params, crc);
 }
 
+/* Same as above but accepts the length in bits. */
+uint64_t crc_calc_bits(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len) {
+    uint64_t bytes = len / 8;
+    uint8_t bits = len % 8;
+
+    crc = crc_initial(params, crc);
+
+    #ifndef DISABLE_SIMD
+    if(cpu_enable_simd) {
+        crc = crc_clmul(params, crc, buf, bytes);
+    } else {
+        crc = crc_bytes(params, crc, buf, bytes);
+    }
+
+    #else
+    crc = crc_bytes(params, crc, buf, bytes);
+    #endif
+
+    crc = crc_bits(params, crc, *(buf + bytes), bits);
+    return crc_final(params, crc);
+}
+
 //----------------------------------------
 
 /* CRC combine functions */
@@ -610,6 +650,12 @@ uint64_t crc_combine_constant(params_t *params, uint64_t len) {
     return xp;
 }
 
+/* Same as above but accepts the length in bits. */
+uint64_t crc_combine_constant_bits(params_t *params, uint64_t len) {
+    uint64_t xp = crc_combine_constant(params, len / 8);
+    return crc_bits(params, xp, 0, len % 8);
+}
+
 /* Find CRC(A + B) from CRC(A) and CRC(B) if the length of B is fixed using the
    constant precomputed from crc_combine_constant.*/
 uint64_t crc_combine_fixed(params_t *params, uint64_t crc, uint64_t crc2, uint64_t xp) {
@@ -629,55 +675,7 @@ uint64_t crc_combine(params_t *params, uint64_t crc, uint64_t crc2, uint64_t len
     return crc_combine_fixed(params, crc, crc2, crc_combine_constant(params, len));
 }
 
-//----------------------------------------
-
-/* Bit-length CRC functions */
-/* Equivalent functions where the length is specified in bits. */
-
-/* Computes the CRC of up to 8 bits using the tableless algorithm. */
-static uint64_t crc_bits(params_t *params, uint64_t crc, uint8_t byte, uint8_t len) {
-    if(params->refin) {
-        uint8_t mask = (uint8_t)-1 >> (8 - len);
-        crc ^= byte & mask;
-        while(len--) {
-            crc = (crc >> 1) ^ (params->poly & and_mask(crc & 1));
-        }
-    } else {
-        uint8_t mask = (uint8_t)-1 << (8 - len);
-        crc ^= (uint64_t)(byte & mask) << 56;
-        while(len--) {
-            crc = (crc << 1) ^ (params->poly & and_mask(crc >> 63));
-        }
-    }
-    return crc;
-}
-
-uint64_t crc_calc_bits(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len) {
-    uint64_t bytes = len / 8;
-    uint8_t bits = len % 8;
-
-    crc = crc_initial(params, crc);
-
-    #ifndef DISABLE_SIMD
-    if(cpu_enable_simd) {
-        crc = crc_clmul(params, crc, buf, bytes);
-    } else {
-        crc = crc_bytes(params, crc, buf, bytes);
-    }
-
-    #else
-    crc = crc_bytes(params, crc, buf, bytes);
-    #endif
-
-    crc = crc_bits(params, crc, *(buf + bytes), bits);
-    return crc_final(params, crc);
-}
-
-uint64_t crc_combine_constant_bits(params_t *params, uint64_t len) {
-    uint64_t xp = crc_combine_constant(params, len / 8);
-    return crc_bits(params, xp, 0, len % 8);
-}
-
+/* Same as above but accepts the length in bits. */
 uint64_t crc_combine_bits(params_t *params, uint64_t crc, uint64_t crc2, uint64_t len) {
     return crc_combine_fixed(params, crc, crc2, crc_combine_constant_bits(params, len));
 }
