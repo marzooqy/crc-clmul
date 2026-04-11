@@ -18,8 +18,7 @@ typedef struct {
     bool refout;
     uint64_t init;
     uint64_t xorout;
-    uint64_t k1;
-    uint64_t k2;
+    uint64_t k1, k2, k3, k4;
     uint64_t table[256];
     uint64_t combine_table[64];
 } params_t;

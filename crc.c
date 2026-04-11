@@ -40,6 +40,7 @@ static void crc_build_table(params_t *params);
 static void crc_build_combine_table(params_t *params);
 
 #ifndef DISABLE_SIMD
+static uint128_t fold(uint128_t x, uint128_t y, uint128_t k);
 static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len);
 static uint64_t multmodp_hw(params_t *params, uint64_t a, uint64_t b);
 #endif
@@ -195,11 +196,7 @@ params_t crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, boo
     }
 
     params.width = width;
-
-    //Reflected:     (p * x^(64-w))'
-    //Non-reflected:  p * x^(64-w)
     params.poly = refin ? reflect(poly, width) : poly << (64 - width);
-
     params.refin = refin;
     params.refout = refout;
 
@@ -210,13 +207,10 @@ params_t crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, boo
     params.xorout = xorout;
 
     #ifndef DISABLE_SIMD
-    //Reflected:     (x^(512+64-1) mod p)'
-    //Non-reflected:  x^(512+64) mod p
-    params.k1 = refin ? xnmodp(&params, 575) : xnmodp(&params, 576);
-
-    //Reflected:     (x^(512-1) mod p)'
-    //Non-reflected:  x^512 mod p
-    params.k2 = refin ? xnmodp(&params, 511) : xnmodp(&params, 512);
+    params.k1 = refin ? xnmodp(&params, 512+64-1) : xnmodp(&params, 512+64);
+    params.k2 = refin ? xnmodp(&params, 512-1)    : xnmodp(&params, 512);
+    params.k3 = refin ? xnmodp(&params, 128+64-1) : xnmodp(&params, 128+64);
+    params.k4 = refin ? xnmodp(&params, 128-1)    : xnmodp(&params, 128);
     #endif
 
     crc_build_table(&params);
@@ -346,19 +340,27 @@ uint64_t crc_table(params_t *params, uint64_t crc, unsigned char const *buf, uin
 
 /* Hardware accelerated algorithm based on the version used in Chromium.
 
-   The fold-by-4 method (Intel paper p11-12) is used to reduce the buffer to a smaller
+   The folding method (Intel paper p11-13) is used to reduce the buffer to a smaller
    buffer "congruent (modulo the polynomial) to the original one" (Intel paper p7).
    Since the new buffer is congruent, we could just use the table-based algorithm
    on the new buffer to find the CRC. This allows us to skip much of the paper.
 
    This doesn't affect performance much, as the table-wise algorithm is used for
-   around or less than 200 bytes. It would be noticably slower if the input data
-   buffer is small, but in that case the speed of the table algorithm is enough.
+   <= 46 bytes. It would be noticably slower if the input data buffer is small,
+   but in that case the speed of the table algorithm is enough.
 
    It should be possible to extend this algorithm to use the 256 and 512 bit
    variants of CLMUL, using a similar approach to the one shown here. */
 
 #ifndef DISABLE_SIMD
+/* Fold x and y using the folding constants stored in k. */
+TARGET_ATTRIBUTE
+static uint128_t fold(uint128_t x, uint128_t y, uint128_t k) {
+    uint128_t h = intrin_clmul_hi(x, k);
+    uint128_t l = intrin_clmul_lo(x, k);
+    return intrin_tri_xor(h, l, y);
+}
+
 TARGET_ATTRIBUTE
 static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len) {
     if(len >= 128) {
@@ -376,56 +378,54 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
         #endif
 
         if(len >= 128) {
-            //After every multiplication the result is split into an upper and
-            //lower half to avoid overflowing the register (Intel paper p8-9).
-            uint128_t h1, h2, h3, h4;
-            uint128_t l1, l2, l3, l4;
-
-            //Load 64 bytes from buf into the registers.
-            uint128_t b1 = intrin_load_le(buf);
-            uint128_t b2 = intrin_load_le(buf + 16);
-            uint128_t b3 = intrin_load_le(buf + 32);
-            uint128_t b4 = intrin_load_le(buf + 48);
-
-            buf += 64;
-            len -= 64;
+            uint128_t x1, x2, x3, x4;
+            uint128_t y1, y2, y3, y4;
 
             if(params->refin) {
                 //Reflected algorithm
                 //Data alignment: [ax^0 bx^1 ... cx^n]
                 uint128_t c = intrin_set(0, crc);
                 uint128_t k2k1 = intrin_set(params->k2, params->k1);
+                uint128_t k4k3 = intrin_set(params->k4, params->k3);
+
+                x1 = intrin_load_le(buf);
+                x2 = intrin_load_le(buf + 16);
+                x3 = intrin_load_le(buf + 32);
+                x4 = intrin_load_le(buf + 48);
+
+                buf += 64;
+                len -= 64;
 
                 //XOR with the init.
-                b1 = intrin_xor(b1, c);
+                x1 = intrin_xor(x1, c);
 
+                //Fold by 4.
                 while(len >= 64) {
-                    //Multiply by k1.
-                    h1 = intrin_clmul_lo(b1, k2k1);
-                    h2 = intrin_clmul_lo(b2, k2k1);
-                    h3 = intrin_clmul_lo(b3, k2k1);
-                    h4 = intrin_clmul_lo(b4, k2k1);
+                    y1 = intrin_load_le(buf);
+                    y2 = intrin_load_le(buf + 16);
+                    y3 = intrin_load_le(buf + 32);
+                    y4 = intrin_load_le(buf + 48);
 
-                    //Multiply by k2.
-                    l1 = intrin_clmul_hi(b1, k2k1);
-                    l2 = intrin_clmul_hi(b2, k2k1);
-                    l3 = intrin_clmul_hi(b3, k2k1);
-                    l4 = intrin_clmul_hi(b4, k2k1);
-
-                    //Load the next chunk into the registers.
-                    b1 = intrin_load_le(buf);
-                    b2 = intrin_load_le(buf + 16);
-                    b3 = intrin_load_le(buf + 32);
-                    b4 = intrin_load_le(buf + 48);
-
-                    //XOR.
-                    b1 = intrin_tri_xor(b1, h1, l1);
-                    b2 = intrin_tri_xor(b2, h2, l2);
-                    b3 = intrin_tri_xor(b3, h3, l3);
-                    b4 = intrin_tri_xor(b4, h4, l4);
+                    x1 = fold(x1, y1, k2k1);
+                    x2 = fold(x2, y2, k2k1);
+                    x3 = fold(x3, y3, k2k1);
+                    x4 = fold(x4, y4, k2k1);
 
                     buf += 64;
                     len -= 64;
+                }
+
+                //Fold to 128 bits.
+                x1 = fold(x1, x2, k4k3);
+                x1 = fold(x1, x3, k4k3);
+                x1 = fold(x1, x4, k4k3);
+
+                //Fold by 1.
+                while(len >= 16) {
+                    y1 = intrin_load_le(buf);
+                    x1 = fold(x1, y1, k4k3);
+                    buf += 16;
+                    len -= 16;
                 }
 
             } else {
@@ -433,57 +433,53 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
                 //Data alignment: [ax^n bx^(n-1) ... cx^0]
                 uint128_t c = intrin_set(crc, 0);
                 uint128_t k1k2 = intrin_set(params->k1, params->k2);
+                uint128_t k3k4 = intrin_set(params->k3, params->k4);
 
-                //Byte swap.
-                b1 = intrin_swap(b1);
-                b2 = intrin_swap(b2);
-                b3 = intrin_swap(b3);
-                b4 = intrin_swap(b4);
+                x1 = intrin_load_bg(buf);
+                x2 = intrin_load_bg(buf + 16);
+                x3 = intrin_load_bg(buf + 32);
+                x4 = intrin_load_bg(buf + 48);
+
+                buf += 64;
+                len -= 64;
 
                 //XOR the left side of buf with the initial value.
-                b1 = intrin_xor(b1, c);
+                x1 = intrin_xor(x1, c);
 
+                //Fold by 4.
                 while(len >= 64) {
-                    //Multiply by k1.
-                    h1 = intrin_clmul_hi(b1, k1k2);
-                    h2 = intrin_clmul_hi(b2, k1k2);
-                    h3 = intrin_clmul_hi(b3, k1k2);
-                    h4 = intrin_clmul_hi(b4, k1k2);
+                    y1 = intrin_load_bg(buf);
+                    y2 = intrin_load_bg(buf + 16);
+                    y3 = intrin_load_bg(buf + 32);
+                    y4 = intrin_load_bg(buf + 48);
 
-                    //Multiply by k2.
-                    l1 = intrin_clmul_lo(b1, k1k2);
-                    l2 = intrin_clmul_lo(b2, k1k2);
-                    l3 = intrin_clmul_lo(b3, k1k2);
-                    l4 = intrin_clmul_lo(b4, k1k2);
-
-                    //Load the next chunk into the registers.
-                    b1 = intrin_load_bg(buf);
-                    b2 = intrin_load_bg(buf + 16);
-                    b3 = intrin_load_bg(buf + 32);
-                    b4 = intrin_load_bg(buf + 48);
-
-                    //XOR.
-                    b1 = intrin_tri_xor(b1, h1, l1);
-                    b2 = intrin_tri_xor(b2, h2, l2);
-                    b3 = intrin_tri_xor(b3, h3, l3);
-                    b4 = intrin_tri_xor(b4, h4, l4);
+                    x1 = fold(x1, y1, k1k2);
+                    x2 = fold(x2, y2, k1k2);
+                    x3 = fold(x3, y3, k1k2);
+                    x4 = fold(x4, y4, k1k2);
 
                     buf += 64;
                     len -= 64;
                 }
 
-                //Byte swap.
-                b1 = intrin_swap(b1);
-                b2 = intrin_swap(b2);
-                b3 = intrin_swap(b3);
-                b4 = intrin_swap(b4);
+                //Fold to 128 bits.
+                x1 = fold(x1, x2, k3k4);
+                x1 = fold(x1, x3, k3k4);
+                x1 = fold(x1, x4, k3k4);
+
+                //Fold by 1.
+                while(len >= 16) {
+                    y1 = intrin_load_bg(buf);
+                    x1 = fold(x1, y1, k3k4);
+                    buf += 16;
+                    len -= 16;
+                }
+
+                x1 = intrin_swap(x1);
             }
 
-            //Calculate the CRC of what's left using the table-based algorithm.
-            crc = crc_bytes(params, 0, (unsigned char*) &b1, 16);
-            crc = crc_bytes(params, crc, (unsigned char*) &b2, 16);
-            crc = crc_bytes(params, crc, (unsigned char*) &b3, 16);
-            crc = crc_bytes(params, crc, (unsigned char*) &b4, 16);
+            //Find the CRC using the folded data.
+            crc = crc_bytes(params, 0, (unsigned char*) &x1, 16);
         }
     }
 
