@@ -89,8 +89,8 @@ static uint64_t reflect(uint64_t x, uint8_t w) {
 }
 
 /* Computes x^n mod p. This is similar to the regular CRC calculation but we have
-   to stop earlier, as the data isn't multiplied by x^w like in CRC. Assumes that
-   the polynomial has been scaled to 64-bits, and that n is larger than 64.*/
+   to stop earlier, since there is no multiplication by x^w like in CRC. Assumes
+   that the polynomial has been scaled to 64-bits, and that n >= 64.*/
 static uint64_t xnmodp(params_t *params, uint16_t n) {
     uint64_t mod = params->poly;
 
@@ -283,23 +283,11 @@ static uint64_t crc_final(params_t *params, uint64_t crc) {
 /* Computes the 256 element table for the tabular algorithm. */
 static void crc_build_table(params_t *params) {
     for(uint16_t i = 0; i < 256; i++) {
-        uint64_t crc = i;
-
-        if(params->refin) {
-            for(uint8_t j = 0; j < 8; j++) {
-                crc = (crc >> 1) ^ (params->poly & and_mask(crc & 1));
-            }
-        } else {
-            crc <<= 56;
-            for(uint8_t j = 0; j < 8; j++) {
-                crc = (crc << 1) ^ (params->poly & and_mask(crc >> 63));
-            }
-        }
-        params->table[i] = crc;
+        params->table[i] = crc_bits(params, 0, i, 8);
     }
 }
 
-/* Computes the CRC of up to 8 bits using the tableless algorithm. */
+/* Computes the CRC of up to 8 bits using the bit-by-bit algorithm. */
 static uint64_t crc_bits(params_t *params, uint64_t crc, uint8_t byte, uint8_t len) {
     if(params->refin) {
         uint8_t mask = (uint8_t)-1 >> (8 - len);

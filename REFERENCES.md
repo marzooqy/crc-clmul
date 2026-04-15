@@ -11,6 +11,11 @@
 - [crcany](https://github.com/madler/crcany)
 - [Catalogue of parametrised CRC algorithms](https://reveng.sourceforge.io/crc-catalogue)
 
+**Combining CRCs:**
+- [crcany](https://github.com/madler/crcany)
+- [CRC-32C tips and tricks](https://mazzo.li/posts/crc-tips.html)
+- [CRC Calculation Of A Mostly Static Data Stream](https://stackoverflow.com/a/23126768)
+
 **Intel Intrinsics:**
 - [A Quick Guide to SSE/SIMD](https://www.cs.virginia.edu/~cr4bd/3330/F2018/simdref.html)
 - [Intel Intrinsics Guide](https://www.intel.com/content/www/us/en/docs/intrinsics-guide/index.html)
