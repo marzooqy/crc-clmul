@@ -22,72 +22,72 @@ if not use_simd and cpu_enable_simd:
 test_data = bytes(b & 0xff for b in range(300))
 failed = False
 
+def check(test_name, test_value, actual_value, print_result_if_true=True):
+    result = test_value == actual_value
+
+    if (result and print_result_if_true) or not result:
+        print(f'{test_name + ':':<17} {test_value:#x} {actual_value:#x} {result}')
+
+    if not result:
+        global failed
+        failed = True
+
 for name, model in models.items():
     print(name)
     params = crc_params(*model)
 
-    # Test 1: Test crc_table
+    # Test crc_table
     value = crc_table(params, params.init, b'123456789')
-    print("table:           ", hex(value), hex(model.check), value == model.check)
+    check('Table', value, model.check)
 
-    if value != model.check:
-        failed = True
+    # Test crc_calc when len < 16
+    value = crc_calc(params, params.init, test_data[:10])
+    value2 = crc_table(params, params.init, test_data[:10])
+    check('len < 16', value, value2)
 
-    # Test 2: Test crc_calc when len < 128
-    value = crc_calc(params, params.init, b'123456789')
-    print("clmul & table:   ", hex(value), hex(model.check), value == model.check)
+    # Test crc_calc when len < 64
+    value = crc_calc(params, params.init, test_data[:50])
+    value2 = crc_table(params, params.init, test_data[:50])
+    check('len < 64', value, value2)
 
-    if value != model.check:
-        failed = True
+    # Test crc_calc when len < 128
+    value = crc_calc(params, params.init, test_data[:100])
+    value2 = crc_table(params, params.init, test_data[:100])
+    check('len < 128', value, value2)
 
-    # Test 3: Test crc_calc when len > 128
+    # Test crc_calc when len > 128
     value = crc_calc(params, params.init, test_data)
     value2 = crc_table(params, params.init, test_data)
-    print("clmul:           ", hex(value), hex(value2), value == value2)
+    check('len > 128', value, value2)
 
-    if value != value2:
-        failed = True
-
-    # Test 4: Test crc_calc in chunks
+    # Test crc_calc in chunks
     value = crc_calc(params, params.init, test_data[:150])
     value = crc_calc(params, value, test_data[150:])
     value2 = crc_calc(params, params.init, test_data)
-    print("clmul chunks:    ", hex(value), hex(value2), value == value2)
+    check('Chunked', value, value2)
 
-    if value != value2:
-        failed = True
-
-    # Test 5: Test crc_calc with an unaligned buffer
+    # Test crc_calc with an unaligned buffer
     for i in range(1, 16):
         value = crc_calc_unaligned(params, params.init, test_data, i)
         value2 = crc_calc(params, params.init, test_data[i:])
+        check('Unaligned', value, value2, False)
 
-        if value != value2:
-            print("clmul unaligned: ", hex(value), hex(value2), value == value2)
-            failed = True
-
-    # Test 6: Test crc_combine_constant and crc_combine_fixed
+    # Test crc_combine_constant and crc_combine_fixed
     xp = crc_combine_constant(params, 4)
     value = crc_calc(params, params.init, b'12345')
     value2 = crc_calc(params, params.init, b'6789')
     value = crc_combine_fixed(params, value, value2, xp)
-    print("combine constant:", hex(value), hex(model.check), value == model.check)
+    check('Combine Constant', value, model.check)
 
-    if value != model.check:
-        failed = True
-
-    # Test 7: Test crc_combine
+    # Test crc_combine
     value = crc_calc(params, params.init, b'12345')
     value2 = crc_calc(params, params.init, b'6789')
     value = crc_combine(params, value, value2, 4)
-    print("combine:         ", hex(value), hex(model.check), value == model.check)
-
-    if value != model.check:
-        failed = True
+    check('Combine', value, model.check)
 
     print()
 
 if failed:
-    raise Exception("Test failed")
+    raise Exception('Test failed')
 else:
-    print("The test ran successfully!")
+    print('The test ran successfully!')

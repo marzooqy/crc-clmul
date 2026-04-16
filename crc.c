@@ -331,7 +331,7 @@ uint64_t crc_table(params_t *params, uint64_t crc, unsigned char const *buf, uin
    The folding method (Intel paper p11-13) is used to reduce the buffer to a smaller
    buffer "congruent (modulo the polynomial) to the original one" (Intel paper p7).
    Since the new buffer is congruent, we could just use the table-based algorithm
-   on the new buffer to find the CRC. This allows us to skip much of the paper.
+   on the new buffer to find the CRC. This allows us to skip the barret reduction.
 
    This doesn't affect performance much, as the table-wise algorithm is used for
    <= 46 bytes. It would be noticably slower if the input data buffer is small,
@@ -351,7 +351,7 @@ static uint128_t fold(uint128_t x, uint128_t y, uint128_t k) {
 
 TARGET_ATTRIBUTE
 static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len) {
-    if(len >= 128) {
+    if(len >= 64) {
         //Align to a 16 byte memory boundary.
         uint64_t adrs = (uintptr_t)buf & 0xf;
         if(adrs) {
@@ -365,7 +365,7 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
         assert(((uintptr_t)buf & 0xf) == 0);
         #endif
 
-        if(len >= 128) {
+        if(len >= 64) {
             uint128_t x1, x2, x3, x4;
             uint128_t y1, y2, y3, y4;
 

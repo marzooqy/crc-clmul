@@ -53,7 +53,7 @@ void bench(uint64_t n, uint64_t len) {
 
     speed = (float)(len * n) / ((float)(end - start) / CLOCKS_PER_SEC) / powf(1024, 3);
 
-    printf(" %.2f ", speed);
+    printf(" %.1f ", speed);
 
     //Non-Reflected
     params = crc_params(64, 0x42f0e1eba9ea3693, 0xffffffffffffffff, false, false, 0xffffffffffffffff, 0x62ec59e3f1a4f00a, &err);
@@ -70,7 +70,7 @@ void bench(uint64_t n, uint64_t len) {
 
     speed = (float)(len * n) / ((float)(end - start) / CLOCKS_PER_SEC) / powf(1024, 3);
 
-    printf("| %.2f |\n", speed);
+    printf("| %.1f |\n", speed);
 
     free(buf);
 }
@@ -79,8 +79,8 @@ void main() {
     printf("| Length | Reflected | Non-Reflected |\n");
     printf("| --- | :-: | :-: |\n");
 
-    bench(ten_pow(7), ten_pow(2));
-    bench(ten_pow(7), ten_pow(3));
+    bench(ten_pow(8), ten_pow(2));
+    bench(ten_pow(8), ten_pow(3));
     bench(ten_pow(7), ten_pow(4));
     bench(ten_pow(6), ten_pow(5));
     bench(ten_pow(5), ten_pow(6));
