@@ -29,7 +29,6 @@
 /* Static function definitions */
 
 static uint64_t reflect(uint64_t x, uint8_t w);
-static uint64_t xnmodp(params_t *params, uint16_t n);
 static uint64_t crc_initial(params_t *params, uint64_t crc);
 static uint64_t crc_final(params_t *params, uint64_t crc);
 static uint64_t crc_bytes(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len);
@@ -71,7 +70,7 @@ static void print_hex128(uint128_t n) {
 
 //----------------------------------------
 
-/* Bit manipulation and math functions */
+/* Bit manipulation functions */
 
 /* Converts a boolean into an AND mask. */
 #define and_mask(c) (-(uint64_t)(c))
@@ -85,25 +84,6 @@ static uint64_t reflect(uint64_t x, uint8_t w) {
     x = ((x >> 2) & 0x3333333333333333) | ((x << 2) & 0xcccccccccccccccc);
     x = ((x >> 1) & 0x5555555555555555) | ((x << 1) & 0xaaaaaaaaaaaaaaaa);
     return x >> (64 - w);
-}
-
-/* Computes x^n mod p. This is similar to the regular CRC calculation but we have
-   to stop earlier, since there is no multiplication by x^w like in CRC. Assumes
-   that the polynomial has been scaled to 64-bits, and that n >= 64.*/
-static uint64_t xnmodp(params_t *params, uint16_t n) {
-    uint64_t mod = params->poly;
-
-    if(params->refin) {
-        while(n-- > 64) {
-            mod = (mod >> 1) ^ (params->poly & and_mask(mod & 1));
-        }
-    } else {
-        while(n-- > 64) {
-            mod = (mod << 1) ^ (params->poly & and_mask(mod >> 63));
-        }
-    }
-
-    return mod;
 }
 
 //----------------------------------------
@@ -157,10 +137,10 @@ static uint64_t xnmodp(params_t *params, uint16_t n) {
    1- Shift to the left by 1 in each iteration. This requires
       additional instructions inside the folding loop.
 
-   2- Do the left shift on k1 and k2 instead. This seems to cause the
+   2- Apply the left shift on the constants instead. This seems to cause the
       constants to be 65-bits long in some cases, which is undesireable.
 
-   3- Use x^(n-1) mod p for computing k1 and k2. This method
+   3- Use x^(n-1) mod p for computing the constants. This method
       appears to work and it is the simplest to implement.
 
    This basically makes the CLMUL instruction compute the correct result
@@ -205,17 +185,20 @@ params_t crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, boo
 
     params.xorout = xorout;
 
-    #ifndef DISABLE_SIMD
-    params.k1 = refin ? xnmodp(&params, 512+64-1) : xnmodp(&params, 512+64);
-    params.k2 = refin ? xnmodp(&params, 512-1)    : xnmodp(&params, 512);
-    params.k3 = refin ? xnmodp(&params, 128+64-1) : xnmodp(&params, 128+64);
-    params.k4 = refin ? xnmodp(&params, 128-1)    : xnmodp(&params, 128);
-    #endif
-
     crc_build_table(&params);
     crc_build_combine_table(&params);
 
-    uint64_t crc = crc_table(&params, params.init, "123456789", 9);
+    //x^n mod p.
+    #ifndef DISABLE_SIMD
+    uint64_t one = refin ? (uint64_t)1 << 63 : 1; //x^0
+    params.k1 = refin ? crc_zeros(&params, one, 512+64-1) : crc_zeros(&params, one, 512+64);
+    params.k2 = refin ? crc_zeros(&params, one, 512-1)    : crc_zeros(&params, one, 512);
+    params.k3 = refin ? crc_zeros(&params, one, 128+64-1) : crc_zeros(&params, one, 128+64);
+    params.k4 = refin ? crc_zeros(&params, one, 128-1)    : crc_zeros(&params, one, 128);
+    #endif
+
+    char *data = "123456789";
+    uint64_t crc = crc_table(&params, params.init, (unsigned char*) data, 9);
     if(crc != check) {
         *error |= CRC_CHECK_INVALID;
     }
@@ -296,6 +279,32 @@ static void crc_build_table(params_t *params) {
         }
         params->table[i] = crc;
     }
+}
+
+/* Apply n zero bits to x. This is similar to multiplying the input by x^n mod p. */
+uint64_t crc_zeros(params_t *params, uint64_t x, uint64_t n) {
+    if(params->refin) {
+        while(n >= 8) {
+            x = (x >> 8) ^ params->table[x & 0xff];
+            n -= 8;
+        }
+
+        while(n--) {
+            x = (x >> 1) ^ (params->poly & and_mask(x & 1));
+        }
+
+    } else {
+        while(n >= 8) {
+            x = (x << 8) ^ params->table[x >> 56];
+            n -= 8;
+        }
+
+        while(n--) {
+            x = (x << 1) ^ (params->poly & and_mask(x >> 63));
+        }
+    }
+
+    return x;
 }
 
 /* Compute the CRC byte-by-byte using the lookup table. */
