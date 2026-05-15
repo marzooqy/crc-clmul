@@ -32,7 +32,6 @@ static uint64_t reflect(uint64_t x, uint8_t w);
 static uint64_t xnmodp(params_t *params, uint16_t n);
 static uint64_t crc_initial(params_t *params, uint64_t crc);
 static uint64_t crc_final(params_t *params, uint64_t crc);
-static uint64_t crc_bits(params_t *params, uint64_t crc, uint8_t byte, uint8_t len);
 static uint64_t crc_bytes(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len);
 static uint64_t multmodp_sw(params_t *params, uint64_t a, uint64_t b);
 static uint64_t multmodp(params_t *params, uint64_t a, uint64_t b);
@@ -145,7 +144,7 @@ static uint64_t xnmodp(params_t *params, uint16_t n) {
 
    xorout is XORed with the CRC at the end of the calculation.
 
-   k1 and k2 are the constants used to fold the buffer (Intel paper p12).
+   k1, k2, k3, and k4 are the constants used to fold the buffer (Intel paper p12).
 
    table holds the values for the byte-by-byte (or Sarwate) algorithm.
    It's the result of computing the CRC for every possible input byte.
@@ -283,26 +282,20 @@ static uint64_t crc_final(params_t *params, uint64_t crc) {
 /* Computes the 256 element table for the tabular algorithm. */
 static void crc_build_table(params_t *params) {
     for(uint16_t i = 0; i < 256; i++) {
-        params->table[i] = crc_bits(params, 0, i, 8);
-    }
-}
+        uint64_t crc = i;
 
-/* Computes the CRC of up to 8 bits using the bit-by-bit algorithm. */
-static uint64_t crc_bits(params_t *params, uint64_t crc, uint8_t byte, uint8_t len) {
-    if(params->refin) {
-        uint8_t mask = (uint8_t)-1 >> (8 - len);
-        crc ^= byte & mask;
-        while(len--) {
-            crc = (crc >> 1) ^ (params->poly & and_mask(crc & 1));
+        if(params->refin) {
+            for(uint8_t j = 0; j < 8; j++) {
+                crc = (crc >> 1) ^ (params->poly & and_mask(crc & 1));
+            }
+        } else {
+            crc <<= 56;
+            for(uint8_t j = 0; j < 8; j++) {
+                crc = (crc << 1) ^ (params->poly & and_mask(crc >> 63));
+            }
         }
-    } else {
-        uint8_t mask = (uint8_t)-1 << (8 - len);
-        crc ^= (uint64_t)(byte & mask) << 56;
-        while(len--) {
-            crc = (crc << 1) ^ (params->poly & and_mask(crc >> 63));
-        }
+        params->table[i] = crc;
     }
-    return crc;
 }
 
 /* Compute the CRC byte-by-byte using the lookup table. */
@@ -494,28 +487,6 @@ uint64_t crc_calc(params_t *params, uint64_t crc, unsigned char const *buf, uint
     return crc_final(params, crc);
 }
 
-/* Same as above but accepts the length in bits. */
-uint64_t crc_calc_bits(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len) {
-    uint64_t bytes = len / 8;
-    uint8_t bits = len % 8;
-
-    crc = crc_initial(params, crc);
-
-    #ifndef DISABLE_SIMD
-    if(cpu_enable_simd) {
-        crc = crc_clmul(params, crc, buf, bytes);
-    } else {
-        crc = crc_bytes(params, crc, buf, bytes);
-    }
-
-    #else
-    crc = crc_bytes(params, crc, buf, bytes);
-    #endif
-
-    crc = crc_bits(params, crc, *(buf + bytes), bits);
-    return crc_final(params, crc);
-}
-
 //----------------------------------------
 
 /* CRC combine functions */
@@ -634,12 +605,6 @@ uint64_t crc_combine_constant(params_t *params, uint64_t len) {
     return xp;
 }
 
-/* Same as above but accepts the length in bits. */
-uint64_t crc_combine_constant_bits(params_t *params, uint64_t len) {
-    uint64_t xp = crc_combine_constant(params, len / 8);
-    return crc_bits(params, xp, 0, len % 8);
-}
-
 /* Find CRC(A + B) from CRC(A) and CRC(B) if the length of B is fixed using the
    constant precomputed from crc_combine_constant.*/
 uint64_t crc_combine_fixed(params_t *params, uint64_t crc, uint64_t crc2, uint64_t xp) {
@@ -657,9 +622,4 @@ uint64_t crc_combine_fixed(params_t *params, uint64_t crc, uint64_t crc2, uint64
 /* Same as crc_combine_fixed but the combine constant is computed in real-time. */
 uint64_t crc_combine(params_t *params, uint64_t crc, uint64_t crc2, uint64_t len) {
     return crc_combine_fixed(params, crc, crc2, crc_combine_constant(params, len));
-}
-
-/* Same as above but accepts the length in bits. */
-uint64_t crc_combine_bits(params_t *params, uint64_t crc, uint64_t crc2, uint64_t len) {
-    return crc_combine_fixed(params, crc, crc2, crc_combine_constant_bits(params, len));
 }
