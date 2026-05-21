@@ -125,6 +125,7 @@ static uint64_t reflect(uint64_t x, uint8_t w) {
    xorout is XORed with the CRC at the end of the calculation.
 
    k1, k2, k3, and k4 are the constants used to fold the buffer (Intel paper p12).
+   They are equal x^n mod p with varied values for n.
 
    table holds the values for the byte-by-byte (or Sarwate) algorithm.
    It's the result of computing the CRC for every possible input byte.
@@ -188,13 +189,14 @@ params_t crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, boo
     crc_build_table(&params);
     crc_build_combine_table(&params);
 
-    //x^n mod p.
+    /* The polynomial is x^64 mod p. One is x^63 mod p in the reflected domain.
+       This makes crc_zeros use the table to compute all of the constants. */
     #ifndef DISABLE_SIMD
-    uint64_t one = refin ? (uint64_t)1 << 63 : 1; //x^0
-    params.k1 = refin ? crc_zeros(&params, one, 512+64-1) : crc_zeros(&params, one, 512+64);
-    params.k2 = refin ? crc_zeros(&params, one, 512-1)    : crc_zeros(&params, one, 512);
-    params.k3 = refin ? crc_zeros(&params, one, 128+64-1) : crc_zeros(&params, one, 128+64);
-    params.k4 = refin ? crc_zeros(&params, one, 128-1)    : crc_zeros(&params, one, 128);
+    uint64_t xp = refin ? 1 : params.poly;
+    params.k4 = crc_zeros(&params, xp, 128-64);         //x^128 mod p
+    params.k3 = crc_zeros(&params, params.k4, 192-128); //x^(128+64) mod p
+    params.k2 = crc_zeros(&params, params.k3, 512-192); //x^512 mod p
+    params.k1 = crc_zeros(&params, params.k2, 576-512); //x^(512+64) mod p
     #endif
 
     char *data = "123456789";
@@ -281,30 +283,30 @@ static void crc_build_table(params_t *params) {
     }
 }
 
-/* Apply n zero bits to x. This is similar to multiplying the input by x^n mod p. */
-uint64_t crc_zeros(params_t *params, uint64_t x, uint64_t n) {
+/* Apply n zero bits to crc. This is similar to multiplying the input by x^n mod p. */
+uint64_t crc_zeros(params_t *params, uint64_t crc, uint64_t n) {
     if(params->refin) {
         while(n >= 8) {
-            x = (x >> 8) ^ params->table[x & 0xff];
+            crc = (crc >> 8) ^ params->table[crc & 0xff];
             n -= 8;
         }
 
         while(n--) {
-            x = (x >> 1) ^ (params->poly & and_mask(x & 1));
+            crc = (crc >> 1) ^ (params->poly & and_mask(crc & 1));
         }
 
     } else {
         while(n >= 8) {
-            x = (x << 8) ^ params->table[x >> 56];
+            crc = (crc << 8) ^ params->table[crc >> 56];
             n -= 8;
         }
 
         while(n--) {
-            x = (x << 1) ^ (params->poly & and_mask(x >> 63));
+            crc = (crc << 1) ^ (params->poly & and_mask(crc >> 63));
         }
     }
 
-    return x;
+    return crc;
 }
 
 /* Compute the CRC byte-by-byte using the lookup table. */
@@ -573,14 +575,15 @@ static uint64_t multmodp(params_t *params, uint64_t a, uint64_t b) {
 
 /* Fills combine_table with values of x^2^i mod p. */
 static void crc_build_combine_table(params_t *params) {
-    uint64_t sq = params->refin ? (uint64_t)1 << 62 : 2; //x^1
+    //Assuming that the polynomial is scaled to 64-bits.
+    params->combine_table[0] = params->refin ? (uint64_t)1 << (64-8-1)  : (uint64_t)1 << 8;  //x^8 mod p
+    params->combine_table[1] = params->refin ? (uint64_t)1 << (64-16-1) : (uint64_t)1 << 16; //x^16 mod p
+    params->combine_table[2] = params->refin ? (uint64_t)1 << (64-32-1) : (uint64_t)1 << 32; //x^32 mod p
 
-    sq = multmodp(params, sq, sq); //x^2
-    sq = multmodp(params, sq, sq); //x^4
-
-    //First value is x^8 mod p.
-    for(uint8_t i = 0; i < 64; i++) {
-        sq = multmodp(params, sq, sq); //x^2^(i+3)
+    //Compute the remaining values.
+    uint64_t sq = params->combine_table[3] = params->poly; //x^64 mod p
+    for(uint8_t i = 4; i < 64; i++) {
+        sq = multmodp(params, sq, sq); //x^2^(i+3) mod p
         params->combine_table[i] = sq;
     }
 }
