@@ -62,6 +62,6 @@ uint64_t DLL_EXPORT crc_combine_fixed(params_t *params, uint64_t crc, uint64_t c
 uint64_t DLL_EXPORT crc_combine(params_t *params, uint64_t crc, uint64_t crc2, uint64_t len);
 
 /* For internal use: Apply n zeros to crc. */
-uint64_t crc_zeros(params_t *params, uint64_t crc, uint64_t n);
+uint64_t DLL_EXPORT crc_zeros(params_t *params, uint64_t crc, uint64_t n);
 
 #endif

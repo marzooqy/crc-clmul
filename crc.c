@@ -189,7 +189,7 @@ params_t crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, boo
     crc_build_table(&params);
     crc_build_combine_table(&params);
 
-    /* The polynomial is x^64 mod p. One is x^63 mod p in the reflected domain.
+    /* One is x^63 mod p in the reflected domain. The polynomial is x^64 mod p.
        This makes crc_zeros use the table to compute all of the constants. */
     #ifndef DISABLE_SIMD
     uint64_t xp = refin ? 1 : params.poly;

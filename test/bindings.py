@@ -39,6 +39,9 @@ _crc.crc_table.restype = ctypes.c_uint64
 _crc.crc_calc.argtypes = [ctypes.POINTER(params_t), ctypes.c_uint64, ctypes.c_char_p, ctypes.c_uint64]
 _crc.crc_calc.restype = ctypes.c_uint64
 
+_crc.crc_zeros.argtypes = [ctypes.POINTER(params_t), ctypes.c_uint64, ctypes.c_uint64]
+_crc.crc_zeros.restype = ctypes.c_uint64
+
 _crc.crc_combine_constant.argtypes = [ctypes.POINTER(params_t), ctypes.c_uint64]
 _crc.crc_combine_constant.restype = ctypes.c_uint64
 
@@ -73,6 +76,9 @@ def crc_calc_unaligned(params, crc, buf, shift):
     pointer2 = ctypes.cast(address + shift, ctypes.POINTER(ctypes.c_char))
 
     return _crc.crc_calc(ctypes.byref(params), crc, pointer2, len(buf) - shift)
+
+def crc_zeros(params, crc, n):
+    return _crc.crc_zeros(ctypes.byref(params), crc, n)
 
 def crc_combine_constant(params, len):
     return _crc.crc_combine_constant(ctypes.byref(params), len)

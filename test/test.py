@@ -26,7 +26,7 @@ def check(test_name, test_value, actual_value, print_result_if_true=True):
     result = test_value == actual_value
 
     if (result and print_result_if_true) or not result:
-        print(f'{test_name + ':':<17} {test_value:#x} {actual_value:#x} {result}')
+        print(f'{test_name + ':':<15} {test_value:#x} {actual_value:#x} {result}')
 
     if not result:
         global failed
@@ -72,12 +72,19 @@ for name, model in models.items():
         value2 = crc_calc(params, params.init, test_data[i:])
         check('Unaligned', value, value2, False)
 
-    # Test crc_combine_constant and crc_combine_fixed
+    # Test crc_combine_constant
+    for i in range(0, 16):
+        j = 2 ** i
+        value = crc_combine_constant(params, j)
+        value2 = crc_zeros(params, (1 << 63) if params.refin else 1, j * 8)
+        check('Combine Constant', value, value2, False)
+
+    # Test crc_combine_fixed
     xp = crc_combine_constant(params, 4)
     value = crc_calc(params, params.init, b'12345')
     value2 = crc_calc(params, params.init, b'6789')
     value = crc_combine_fixed(params, value, value2, xp)
-    check('Combine Constant', value, model.check)
+    check('Combine Fixed', value, model.check)
 
     # Test crc_combine
     value = crc_calc(params, params.init, b'12345')
