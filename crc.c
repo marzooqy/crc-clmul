@@ -7,7 +7,7 @@
 
 #ifdef __GNUC__
 #ifdef __x86_64__
-    #define TARGET_ATTRIBUTE __attribute__((target("sse4.2,pclmul")))
+    #define TARGET_ATTRIBUTE __attribute__((target("sse4.1,pclmul")))
 #elif __aarch64__
     #define TARGET_ATTRIBUTE __attribute__((target("+aes")))
 #else
@@ -39,6 +39,7 @@ static void crc_build_combine_table(params_t *params);
 
 #ifndef DISABLE_SIMD
 static uint128_t fold(uint128_t x, uint128_t y, uint128_t k);
+static uint64_t modp(params_t *params, uint128_t x, bool shift);
 static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len);
 static uint64_t multmodp_hw(params_t *params, uint64_t a, uint64_t b);
 #endif
@@ -124,7 +125,7 @@ static uint64_t reflect(uint64_t x, uint8_t w) {
 
    xorout is XORed with the CRC at the end of the calculation.
 
-   k1, k2, k3, and k4 are the constants used to fold the buffer (Intel paper p12).
+   k constants are used to fold the buffer (Intel paper p12).
    They are equal x^n mod p with varied values for n.
 
    table holds the values for the byte-by-byte (or Sarwate) algorithm.
@@ -189,13 +190,14 @@ params_t crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, boo
     crc_build_table(&params);
     crc_build_combine_table(&params);
 
-    /* One is x^63 mod p in the reflected domain. The polynomial is x^64 mod p.
-       This makes crc_zeros use the table to compute all of the constants. */
     #ifndef DISABLE_SIMD
-    uint64_t xp = refin ? 1 : params.poly;
-    params.k4 = crc_zeros(&params, xp, 128-64);         //x^128 mod p
-    params.k3 = crc_zeros(&params, params.k4, 192-128); //x^(128+64) mod p
-    params.k2 = crc_zeros(&params, params.k3, 512-192); //x^512 mod p
+    params.k[1] = refin ? (uint64_t)1 << 56 : (uint64_t)1 << 8; //x^8 mod p
+
+    for(uint8_t i = 2; i <= 24; i++) {
+        params.k[i] = crc_zeros(&params, params.k[i - 1], 8); //x^8i mod p
+    }
+
+    params.k2 = crc_zeros(&params, params.k[24], 512-24*8); //x^512 mod p
     params.k1 = crc_zeros(&params, params.k2, 576-512); //x^(512+64) mod p
     #endif
 
@@ -330,20 +332,6 @@ uint64_t crc_table(params_t *params, uint64_t crc, unsigned char const *buf, uin
     return crc_final(params, crc);
 }
 
-/* Hardware accelerated algorithm based on the version used in Chromium.
-
-   The folding method (Intel paper p11-13) is used to reduce the buffer to a smaller
-   buffer "congruent (modulo the polynomial) to the original one" (Intel paper p7).
-   Since the new buffer is congruent, we could just use the table-based algorithm
-   on the new buffer to find the CRC. This allows us to skip the barret reduction.
-
-   This doesn't affect performance much, as the table-wise algorithm is used for
-   <= 46 bytes. It would be noticably slower if the input data buffer is small,
-   but in that case the speed of the table algorithm is enough.
-
-   It should be possible to extend this algorithm to use the 256 and 512 bit
-   variants of CLMUL, using a similar approach to the one shown here. */
-
 #ifndef DISABLE_SIMD
 /* Fold x and y using the folding constants stored in k. */
 TARGET_ATTRIBUTE
@@ -353,43 +341,86 @@ static uint128_t fold(uint128_t x, uint128_t y, uint128_t k) {
     return intrin_tri_xor(h, l, y);
 }
 
+/* Find the modulos of a 128-bit integer. shift accounts for reflection if it's
+   not already accounted for (Intel paper p20). */
 TARGET_ATTRIBUTE
-static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len) {
-    if(len >= 64) {
-        //Align to a 16 byte memory boundary.
-        uint64_t adrs = (uintptr_t)buf & 0xf;
-        if(adrs) {
-            uint64_t rem = 16 - adrs;
-            crc = crc_bytes(params, crc, buf, rem);
-            buf += rem;
-            len -= rem;
+static uint64_t modp(params_t *params, uint128_t x, bool shift) {
+    uint64_t hi = intrin_get(x, 1);
+    uint64_t lo = intrin_get(x, 0);
+
+    if(params->refin) {
+        if(shift) {
+            hi = (hi << 1) | (lo >> 63);
+            lo <<= 1;
         }
 
-        #ifdef DEBUG
-        assert(((uintptr_t)buf & 0xf) == 0);
-        #endif
+        for(uint8_t i = 0; i < 8; i++) {
+            lo = (lo >> 8) ^ params->table[lo & 0xff];
+        }
 
-        if(len >= 64) {
-            uint128_t x1, x2, x3, x4;
-            uint128_t y1, y2, y3, y4;
+    } else {
+        for(uint8_t i = 0; i < 8; i++) {
+            hi = (hi << 8) ^ params->table[hi >> 56];
+        }
+    }
 
-            if(params->refin) {
-                //Reflected algorithm
-                //Data alignment: [ax^0 bx^1 ... cx^n]
-                uint128_t c = intrin_set(0, crc);
-                uint128_t k2k1 = intrin_set(params->k2, params->k1);
-                uint128_t k4k3 = intrin_set(params->k4, params->k3);
+    return hi ^ lo;
+}
 
-                x1 = intrin_load_le(buf);
-                x2 = intrin_load_le(buf + 16);
-                x3 = intrin_load_le(buf + 32);
-                x4 = intrin_load_le(buf + 48);
+/* Hardware accelerated algorithm based on the version used in Chromium.
 
-                buf += 64;
-                len -= 64;
+   The folding method (Intel paper p11-13) is used to reduce the buffer to a smaller
+   buffer "congruent (modulo the polynomial) to the original one" (Intel paper p7).
 
-                //XOR with the init.
-                x1 = intrin_xor(x1, c);
+   It should be possible to extend this algorithm to use the 256 and 512 bit
+   variants of CLMUL, using a similar approach to the one shown here. */
+
+TARGET_ATTRIBUTE
+static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len) {
+    uint64_t offset = (uintptr_t)buf & 0xf;
+    uint64_t rem = 16 - offset;
+
+    if(len >= 16 + rem) {
+        const uint128_t z = intrin_set(0, 0);
+        uint128_t x1, x2, x3, x4;
+        uint128_t y1, y2, y3, y4;
+        uint128_t kxky, kykx;
+
+        if(params->refin) {
+            //Reflected algorithm
+            //Data alignment: [ax^0 bx^1 ... cx^n]
+            uint128_t c = intrin_set(0, crc);
+            uint128_t k2k1 = intrin_set(params->k2, params->k1);
+            uint128_t k4k3 = intrin_set(params->k[128 / 8], params->k[192 / 8]);
+            uint128_t k5k4 = intrin_set(params->k[64 / 8], params->k[128 / 8]);
+
+            //xor with the init.
+            x1 = intrin_loadu_le(buf);
+            x1 = intrin_xor(x1, c);
+            buf += 16;
+            len -= 16;
+
+            //Fold unaligned bytes.
+            if(offset) {
+                kykx = intrin_set(params->k[rem], params->k[rem + 8]);
+                y1 = intrin_loadu_le(buf - (16 - rem));
+                y1 = intrin_maskr(y1, 16 - rem);
+                x1 = fold(x1, y1, kykx);
+                buf += rem;
+                len -= rem;
+            }
+
+            #ifdef DEBUG
+            assert(((uintptr_t)buf & 0xf) == 0);
+            #endif
+
+            if(len >= 48) {
+                x2 = intrin_load_le(buf);
+                x3 = intrin_load_le(buf + 16);
+                x4 = intrin_load_le(buf + 32);
+
+                buf += 48;
+                len -= 48;
 
                 //Fold by 4.
                 while(len >= 64) {
@@ -411,32 +442,62 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
                 x1 = fold(x1, x2, k4k3);
                 x1 = fold(x1, x3, k4k3);
                 x1 = fold(x1, x4, k4k3);
+            }
 
-                //Fold by 1.
-                while(len >= 16) {
-                    y1 = intrin_load_le(buf);
-                    x1 = fold(x1, y1, k4k3);
-                    buf += 16;
-                    len -= 16;
-                }
+            //Fold by 1.
+            while(len >= 16) {
+                y1 = intrin_load_le(buf);
+                x1 = fold(x1, y1, k4k3);
+                buf += 16;
+                len -= 16;
+            }
 
-            } else {
-                //Non-reflected algorithm
-                //Data alignment: [ax^n bx^(n-1) ... cx^0]
-                uint128_t c = intrin_set(crc, 0);
-                uint128_t k1k2 = intrin_set(params->k1, params->k2);
-                uint128_t k3k4 = intrin_set(params->k3, params->k4);
+            //Fold the remaining bytes.
+            if(len > 0) {
+                kykx = intrin_set(params->k[len], params->k[len + 8]);
+                y1 = intrin_loadu_le(buf - (16 - len));
+                y1 = intrin_maskr(y1, 16 - len);
+                x1 = fold(x1, y1, kykx);
+            }
 
-                x1 = intrin_load_bg(buf);
-                x2 = intrin_load_bg(buf + 16);
-                x3 = intrin_load_bg(buf + 32);
-                x4 = intrin_load_bg(buf + 48);
+            //Add 64 zeros.
+            x1 = fold(x1, z, k5k4);
 
-                buf += 64;
-                len -= 64;
+        } else {
+            //Non-reflected algorithm
+            //Data alignment: [ax^n bx^(n-1) ... cx^0]
+            uint128_t c = intrin_set(crc, 0);
+            uint128_t k1k2 = intrin_set(params->k1, params->k2);
+            uint128_t k3k4 = intrin_set(params->k[192 / 8], params->k[128 / 8]);
+            uint128_t k4k5 = intrin_set(params->k[128 / 8], params->k[64 / 8]);
 
-                //XOR the left side of buf with the initial value.
-                x1 = intrin_xor(x1, c);
+            //xor with the init.
+            x1 = intrin_loadu_bg(buf);
+            x1 = intrin_xor(x1, c);
+            buf += 16;
+            len -= 16;
+
+            //Fold unaligned bytes.
+            if(offset) {
+                kxky = intrin_set(params->k[rem + 8], params->k[rem]);
+                y1 = intrin_loadu_bg(buf - (16 - rem));
+                y1 = intrin_maskl(y1, 16 - rem);
+                x1 = fold(x1, y1, kxky);
+                buf += rem;
+                len -= rem;
+            }
+
+            #ifdef DEBUG
+            assert(((uintptr_t)buf & 0xf) == 0);
+            #endif
+
+            if(len >= 48) {
+                x2 = intrin_load_bg(buf);
+                x3 = intrin_load_bg(buf + 16);
+                x4 = intrin_load_bg(buf + 32);
+
+                buf += 48;
+                len -= 48;
 
                 //Fold by 4.
                 while(len >= 64) {
@@ -458,24 +519,31 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
                 x1 = fold(x1, x2, k3k4);
                 x1 = fold(x1, x3, k3k4);
                 x1 = fold(x1, x4, k3k4);
-
-                //Fold by 1.
-                while(len >= 16) {
-                    y1 = intrin_load_bg(buf);
-                    x1 = fold(x1, y1, k3k4);
-                    buf += 16;
-                    len -= 16;
-                }
-
-                x1 = intrin_swap(x1);
             }
 
-            //Find the CRC using the folded data.
-            crc = crc_bytes(params, 0, (unsigned char*) &x1, 16);
+            //Fold by 1.
+            while(len >= 16) {
+                y1 = intrin_load_bg(buf);
+                x1 = fold(x1, y1, k3k4);
+                buf += 16;
+                len -= 16;
+            }
+
+            //Fold the remaining bytes.
+            if(len > 0) {
+                kxky = intrin_set(params->k[len + 8], params->k[len]);
+                y1 = intrin_loadu_bg(buf - (16 - len));
+                y1 = intrin_maskl(y1, 16 - len);
+                x1 = fold(x1, y1, kxky);
+            }
+
+            //Add 64 zeros.
+            x1 = fold(x1, z, k4k5);
         }
+
+        return modp(params, x1, false);
     }
 
-    //Compute the remaining bytes and return the CRC.
     return crc_bytes(params, crc, buf, len);
 }
 #endif
@@ -538,24 +606,7 @@ static uint64_t multmodp_hw(params_t *params, uint64_t a, uint64_t b) {
 
     uint128_t prod = intrin_clmul_lo(ar, br);
 
-    uint64_t hi = intrin_get(prod, 1);
-    uint64_t lo = intrin_get(prod, 0);
-
-    //Shift to the left by 1 to account for reflection (Intel paper p20).
-    if(params->refin) {
-        hi = (hi << 1) | (lo >> 63);
-        lo <<= 1;
-        for(uint8_t i = 0; i < 8; i++) {
-            lo = (lo >> 8) ^ params->table[lo & 0xff];
-        }
-
-    } else {
-        for(uint8_t i = 0; i < 8; i++) {
-            hi = (hi << 8) ^ params->table[hi >> 56];
-        }
-    }
-
-    return hi ^ lo;
+    return modp(params, prod, true);
 }
 #endif
 
