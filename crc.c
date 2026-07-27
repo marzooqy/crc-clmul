@@ -29,6 +29,7 @@
 /* Static function definitions */
 
 static uint64_t reflect(uint64_t x, uint8_t w);
+static uint64_t xndivp(params_t *params, uint64_t n);
 static uint64_t crc_initial(params_t *params, uint64_t crc);
 static uint64_t crc_final(params_t *params, uint64_t crc);
 static uint64_t crc_bytes(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len);
@@ -39,7 +40,8 @@ static void crc_build_combine_table(params_t *params);
 
 #ifndef DISABLE_SIMD
 static uint128_t fold(uint128_t x, uint128_t y, uint128_t k);
-static uint64_t modp(params_t *params, uint128_t x, bool shift);
+static uint128_t clmul65(uint128_t a, uint128_t b);
+static uint64_t modp(params_t *params, uint128_t x);
 static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len);
 static uint64_t multmodp_hw(params_t *params, uint64_t a, uint64_t b);
 #endif
@@ -87,6 +89,29 @@ static uint64_t reflect(uint64_t x, uint8_t w) {
     return x >> (64 - w);
 }
 
+/* Calculate the result of dividing x^n by the polynomial.
+   64 <= n < 128. if n >= 128 then only the last 64 bits are returned. */
+static uint64_t xndivp(params_t *params, uint64_t n) {
+    uint64_t mod = params->poly;
+    uint64_t div;
+
+    if(params->refin) {
+        div = (uint64_t)1 << 63;
+        while(n-- > 64) {
+            div = (div >> 1) | (mod << 63);
+            mod = (mod >> 1) ^ (params->poly & and_mask(mod & 1));
+        }
+    } else {
+        div = 1;
+        while(n-- > 64) {
+            div = (div << 1) | (mod >> 63);
+            mod = (mod << 1) ^ (params->poly & and_mask(mod >> 63));
+        }
+    }
+
+    return div;
+}
+
 //----------------------------------------
 
 /* params_t constructor */
@@ -127,6 +152,8 @@ static uint64_t reflect(uint64_t x, uint8_t w) {
 
    k constants are used to fold the buffer (Intel paper p12).
    They are equal x^n mod p with varied values for n.
+
+   u is used for the Barret Reduction. It's equal to x^128 / p.
 
    table holds the values for the byte-by-byte (or Sarwate) algorithm.
    It's the result of computing the CRC for every possible input byte.
@@ -186,6 +213,8 @@ params_t crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, boo
     params.init = (refout ? reflect(init, width) : init) ^ xorout;
 
     params.xorout = xorout;
+
+    params.u = xndivp(&params, refin ? 127 : 128);
 
     crc_build_table(&params);
     crc_build_combine_table(&params);
@@ -332,6 +361,10 @@ uint64_t crc_table(params_t *params, uint64_t crc, unsigned char const *buf, uin
     return crc_final(params, crc);
 }
 
+//----------------------------------------
+
+/* Hardware-accelerated CRC */
+
 #ifndef DISABLE_SIMD
 /* Fold x and y using the folding constants stored in k. */
 TARGET_ATTRIBUTE
@@ -341,30 +374,35 @@ static uint128_t fold(uint128_t x, uint128_t y, uint128_t k) {
     return intrin_tri_xor(h, l, y);
 }
 
-/* Find the modulos of a 128-bit integer. shift accounts for reflection if it's
-   not already accounted for (Intel paper p20). */
+/* Multiply 64-bits integer a by 65-bits integer b. */
 TARGET_ATTRIBUTE
-static uint64_t modp(params_t *params, uint128_t x, bool shift) {
-    uint64_t hi = intrin_get(x, 1);
-    uint64_t lo = intrin_get(x, 0);
+static uint128_t clmul65(uint128_t a, uint128_t b) {
+    uint128_t hi = intrin_clmul_lo(a, intrin_shr(b, 8));
+    uint128_t lo = intrin_clmul_lo(a, b);
+    return intrin_xor(intrin_shl(hi, 8), lo);
+}
 
+/* Find the modulos of a 128-bit integer using Barret Reduction (Intel paper p18,20).
+   Note that the constants u and p can be 65-bits long. */
+TARGET_ATTRIBUTE
+static uint64_t modp(params_t *params, uint128_t x) {
     if(params->refin) {
-        if(shift) {
-            hi = (hi << 1) | (lo >> 63);
-            lo <<= 1;
-        }
-
-        for(uint8_t i = 0; i < 8; i++) {
-            lo = (lo >> 8) ^ params->table[lo & 0xff];
-        }
+        //Add the implicit 1 back to the polynomial.
+        uint128_t u = intrin_set(0, params->u);
+        uint128_t p = intrin_set(params->poly >> 63, (params->poly << 1) | 1);
+        uint128_t t1 = clmul65(x, u);
+        uint128_t t2 = clmul65(t1, p);
+        uint128_t c = intrin_xor(x, t2);
+        return intrin_get(c, 1);
 
     } else {
-        for(uint8_t i = 0; i < 8; i++) {
-            hi = (hi << 8) ^ params->table[hi >> 56];
-        }
+        uint128_t u = intrin_set(1, params->u);
+        uint128_t p = intrin_set(1, params->poly);
+        uint128_t t1 = clmul65(intrin_shr(x, 8), u);
+        uint128_t t2 = clmul65(intrin_shr(t1, 8), p);
+        uint128_t c = intrin_xor(x, t2);
+        return intrin_get(c, 0);
     }
-
-    return hi ^ lo;
 }
 
 /* Hardware accelerated algorithm based on the version used in Chromium.
@@ -541,7 +579,7 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
             x1 = fold(x1, z, k4k5);
         }
 
-        return modp(params, x1, false);
+        return modp(params, x1);
     }
 
     return crc_bytes(params, crc, buf, len);
@@ -600,13 +638,16 @@ static uint64_t multmodp_sw(params_t *params, uint64_t a, uint64_t b) {
 #ifndef DISABLE_SIMD
 TARGET_ATTRIBUTE
 static uint64_t multmodp_hw(params_t *params, uint64_t a, uint64_t b) {
-    //Load into two registers and multiply.
+    const uint128_t x = intrin_set(0, 2); //x^1
     uint128_t ar = intrin_set(0, a);
     uint128_t br = intrin_set(0, b);
 
-    uint128_t prod = intrin_clmul_lo(ar, br);
+    //Shift to the left by 1 to account for reflection (Intel paper p20).
+    if(params->refin) {
+        br = intrin_clmul_lo(br, x);
+    }
 
-    return modp(params, prod, true);
+    return modp(params, clmul65(ar, br));
 }
 #endif
 

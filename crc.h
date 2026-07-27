@@ -19,6 +19,7 @@ typedef struct {
     uint64_t init;
     uint64_t xorout;
     uint64_t k1, k2;
+    uint64_t u;
     uint64_t k[25];
     uint64_t table[256];
     uint64_t combine_table[64];

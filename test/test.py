@@ -63,13 +63,13 @@ for name, model in models.items():
     # Test crc_calc in chunks
     value = crc_calc(params, params.init, test_data[:150])
     value = crc_calc(params, value, test_data[150:])
-    value2 = crc_calc(params, params.init, test_data)
+    value2 = crc_table(params, params.init, test_data)
     check('Chunked', value, value2)
 
     # Test crc_calc with an unaligned buffer
     for i in range(1, 16):
         value = crc_calc_unaligned(params, params.init, test_data, i)
-        value2 = crc_calc(params, params.init, test_data[i:])
+        value2 = crc_table(params, params.init, test_data[i:])
         check('Unaligned', value, value2, False)
 
     # Test crc_combine_constant
