@@ -1,3 +1,5 @@
+# Generate tables for the shuffle intrinsic
+
 print('Shift left')
 for i in range(16):
     print('{', end='')

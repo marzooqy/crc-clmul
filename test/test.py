@@ -26,7 +26,7 @@ def check(test_name, test_value, actual_value, print_result_if_true=True):
     result = test_value == actual_value
 
     if (result and print_result_if_true) or not result:
-        print(f'{test_name + ':':<15} {test_value:#x} {actual_value:#x} {result}')
+        print(f'{test_name + ':':<11} {test_value:#x} {actual_value:#x} {result}')
 
     if not result:
         global failed
@@ -79,18 +79,13 @@ for name, model in models.items():
         value2 = crc_zeros(params, (1 << 63) if params.refin else 1, j * 8)
         check('Combine Constant', value, value2, False)
 
-    # Test crc_combine_fixed
-    xp = crc_combine_constant(params, 4)
-    value = crc_calc(params, params.init, b'12345')
-    value2 = crc_calc(params, params.init, b'6789')
-    value = crc_combine_fixed(params, value, value2, xp)
-    check('Combine Fixed', value, model.check)
-
     # Test crc_combine
-    value = crc_calc(params, params.init, b'12345')
-    value2 = crc_calc(params, params.init, b'6789')
-    value = crc_combine(params, value, value2, 4)
-    check('Combine', value, model.check)
+    xp = crc_combine_constant(params, len(test_data[150:]))
+    value = crc_calc(params, params.init, test_data[:150])
+    value2 = crc_calc(params, params.init, test_data[150:])
+    value3 = crc_combine(params, value, value2, xp)
+    value4 = crc_table(params, params.init, test_data)
+    check('Combine', value3, value4)
 
     print()
 

@@ -214,10 +214,7 @@ params_t crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, boo
 
     params.xorout = xorout;
 
-    params.u = xndivp(&params, refin ? 127 : 128);
-
     crc_build_table(&params);
-    crc_build_combine_table(&params);
 
     #ifndef DISABLE_SIMD
     params.k[1] = refin ? (uint64_t)1 << 56 : (uint64_t)1 << 8; //x^8 mod p
@@ -228,7 +225,11 @@ params_t crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, boo
 
     params.k2 = crc_zeros(&params, params.k[24], 512-24*8); //x^512 mod p
     params.k1 = crc_zeros(&params, params.k2, 576-512); //x^(512+64) mod p
+
+    params.u = xndivp(&params, refin ? 127 : 128);
     #endif
+
+    crc_build_combine_table(&params);
 
     char *data = "123456789";
     uint64_t crc = crc_table(&params, params.init, (unsigned char*) data, 9);
@@ -409,6 +410,7 @@ static uint64_t modp(params_t *params, uint128_t x) {
 
    The folding method (Intel paper p11-13) is used to reduce the buffer to a smaller
    buffer "congruent (modulo the polynomial) to the original one" (Intel paper p7).
+   The CRC of the folded buffer is then computed using Barret Reduction.
 
    It should be possible to extend this algorithm to use the 256 and 512 bit
    variants of CLMUL, using a similar approach to the one shown here. */
@@ -680,9 +682,7 @@ static void crc_build_combine_table(params_t *params) {
     }
 }
 
-/* Multiplies the various x^2^i mod p factors to get x^8n mod p. This constant
-   can be precomputed once and reused in conjunction with crc_combine_fixed
-   if the length of the second CRC's message is always the same. */
+/* Multiplies the various x^2^i mod p factors to get x^8n mod p. */
 uint64_t crc_combine_constant(params_t *params, uint64_t len) {
     if(len == 0) {
         return params->refin ? (uint64_t)1 << 63 : 1;
@@ -709,9 +709,8 @@ uint64_t crc_combine_constant(params_t *params, uint64_t len) {
     return xp;
 }
 
-/* Find CRC(A + B) from CRC(A) and CRC(B) if the length of B is fixed using the
-   constant precomputed from crc_combine_constant.*/
-uint64_t crc_combine_fixed(params_t *params, uint64_t crc, uint64_t crc2, uint64_t xp) {
+/* Find CRC((A * x^(8*len(B))) + B) from CRC(A) and CRC(B) using the value returned by crc_combine_constant. */
+uint64_t crc_combine(params_t *params, uint64_t crc, uint64_t crc2, uint64_t xp) {
     /* It's not clear why we should XOR with the initial. It could be that we
        are treating the CRC as the first incoming bits to the register. */
     crc ^= params->init ^ params->xorout;
@@ -721,9 +720,4 @@ uint64_t crc_combine_fixed(params_t *params, uint64_t crc, uint64_t crc2, uint64
     crc = multmodp(params, crc, xp) ^ crc2;
 
     return crc_final(params, crc);
-}
-
-/* Same as crc_combine_fixed but the combine constant is computed in real-time. */
-uint64_t crc_combine(params_t *params, uint64_t crc, uint64_t crc2, uint64_t len) {
-    return crc_combine_fixed(params, crc, crc2, crc_combine_constant(params, len));
 }
