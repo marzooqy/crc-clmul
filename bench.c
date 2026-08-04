@@ -79,7 +79,7 @@ void main() {
     printf("| Length | Reflected | Non-Reflected |\n");
     printf("| --- | :-: | :-: |\n");
 
-    bench(ten_pow(8), ten_pow(2));
+    bench(ten_pow(9), ten_pow(2));
     bench(ten_pow(8), ten_pow(3));
     bench(ten_pow(7), ten_pow(4));
     bench(ten_pow(6), ten_pow(5));

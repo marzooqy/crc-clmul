@@ -38,36 +38,4 @@ for i in range(16):
         print(',', end='')
     print()
 
-print('\nMask left')
-for i in range(16):
-    print('{', end='')
-    for j in range(16 - i):
-        print(f'{-1:2d}', end='')
-        if j < 15:
-            print(', ', end='')
-    for j in range(16 - i, 16):
-        print(f'{0:#2d}', end='')
-        if j < 15:
-            print(', ', end='')
-    print('}', end='')
-    if i < 15:
-        print(',', end='')
-    print()
-
-print('\nMask right')
-for i in range(16):
-    print('{', end='')
-    for j in range(i):
-        print(f'{0:2d}', end='')
-        if j < 15:
-            print(', ', end='')
-    for j in range(i, 16):
-        print(f'{-1:2d}', end='')
-        if j < 15:
-            print(', ', end='')
-    print('}', end='')
-    if i < 15:
-        print(',', end='')
-    print()
-
 print()

@@ -421,10 +421,10 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
     uint64_t rem = 16 - offset;
 
     if(len >= 16 + rem) {
-        const uint128_t z = intrin_set(0, 0);
+        const uint128_t mask = intrin_set(0xffffffffffffffff, 0xffffffffffffffff);
+        const uint128_t zero = intrin_set(0, 0);
         uint128_t x1, x2, x3, x4;
         uint128_t y1, y2, y3, y4;
-        uint128_t kxky, kykx;
 
         if(params->refin) {
             //Reflected algorithm
@@ -433,6 +433,7 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
             uint128_t k2k1 = intrin_set(params->k2, params->k1);
             uint128_t k4k3 = intrin_set(params->k[128 / 8], params->k[192 / 8]);
             uint128_t k5k4 = intrin_set(params->k[64 / 8], params->k[128 / 8]);
+            uint128_t kykx;
 
             //xor with the init.
             x1 = intrin_loadu_le(buf);
@@ -444,7 +445,7 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
             if(offset) {
                 kykx = intrin_set(params->k[rem], params->k[rem + 8]);
                 y1 = intrin_loadu_le(buf - (16 - rem));
-                y1 = intrin_maskr(y1, 16 - rem);
+                y1 = intrin_and(y1, intrin_shl(mask, 16 - rem));
                 x1 = fold(x1, y1, kykx);
                 buf += rem;
                 len -= rem;
@@ -496,12 +497,12 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
             if(len > 0) {
                 kykx = intrin_set(params->k[len], params->k[len + 8]);
                 y1 = intrin_loadu_le(buf - (16 - len));
-                y1 = intrin_maskr(y1, 16 - len);
+                y1 = intrin_and(y1, intrin_shl(mask, 16 - len));
                 x1 = fold(x1, y1, kykx);
             }
 
             //Add 64 zeros.
-            x1 = fold(x1, z, k5k4);
+            x1 = fold(x1, zero, k5k4);
 
         } else {
             //Non-reflected algorithm
@@ -510,6 +511,7 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
             uint128_t k1k2 = intrin_set(params->k1, params->k2);
             uint128_t k3k4 = intrin_set(params->k[192 / 8], params->k[128 / 8]);
             uint128_t k4k5 = intrin_set(params->k[128 / 8], params->k[64 / 8]);
+            uint128_t kxky;
 
             //xor with the init.
             x1 = intrin_loadu_bg(buf);
@@ -521,7 +523,7 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
             if(offset) {
                 kxky = intrin_set(params->k[rem + 8], params->k[rem]);
                 y1 = intrin_loadu_bg(buf - (16 - rem));
-                y1 = intrin_maskl(y1, 16 - rem);
+                y1 = intrin_and(y1, intrin_shr(mask, 16 - rem));
                 x1 = fold(x1, y1, kxky);
                 buf += rem;
                 len -= rem;
@@ -573,12 +575,12 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
             if(len > 0) {
                 kxky = intrin_set(params->k[len + 8], params->k[len]);
                 y1 = intrin_loadu_bg(buf - (16 - len));
-                y1 = intrin_maskl(y1, 16 - len);
+                y1 = intrin_and(y1, intrin_shr(mask, 16 - len));
                 x1 = fold(x1, y1, kxky);
             }
 
             //Add 64 zeros.
-            x1 = fold(x1, z, k4k5);
+            x1 = fold(x1, zero, k4k5);
         }
 
         return modp(params, x1);
