@@ -7,17 +7,17 @@
 
 #ifdef __GNUC__
 #ifdef __x86_64__
-    #define TARGET_ATTRIBUTE __attribute__((target("sse4.1,pclmul")))
+#define TARGET_ATTRIBUTE __attribute__((target("sse4.1,pclmul")))
 #elif __aarch64__
-    #define TARGET_ATTRIBUTE __attribute__((target("+aes")))
+#define TARGET_ATTRIBUTE __attribute__((target("+aes")))
 #else
-    #error "Unsupported Architecture. Compile on x86-64 or aarch64 or use DISABLE_SIMD."
+#error "Unsupported Architecture. Compile on x86-64 or aarch64 or use DISABLE_SIMD."
 #endif
 #elif _MSC_VER
 #if defined(_M_AMD64) || defined(_M_ARM64)
-    #define TARGET_ATTRIBUTE
+#define TARGET_ATTRIBUTE
 #else
-    #error "Unsupported Architecture. Compile on x86-64 or aarch64 or use DISABLE_SIMD."
+#error "Unsupported Architecture. Compile on x86-64 or aarch64 or use DISABLE_SIMD."
 #endif
 #else
 #error "Unsupported Compiler. Use GCC, Clang, or MSVC."
@@ -217,13 +217,13 @@ params_t crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, boo
     crc_build_table(&params);
 
     #ifndef DISABLE_SIMD
-    params.k[1] = refin ? (uint64_t)1 << 56 : (uint64_t)1 << 8; //x^8 mod p
+    params.k[0] = refin ? (uint64_t)1 << 56 : (uint64_t)1 << 8; //x^8 mod p
 
-    for(uint8_t i = 2; i <= 24; i++) {
-        params.k[i] = crc_zeros(&params, params.k[i - 1], 8); //x^8i mod p
+    for(uint8_t i = 1; i < 24; i++) {
+        params.k[i] = crc_zeros(&params, params.k[i - 1], 8); //x^(8*(i+1)) mod p
     }
 
-    params.k2 = crc_zeros(&params, params.k[24], 512-24*8); //x^512 mod p
+    params.k2 = crc_zeros(&params, params.k[23], 512-8*24); //x^512 mod p
     params.k1 = crc_zeros(&params, params.k2, 576-512); //x^(512+64) mod p
 
     params.u = xndivp(&params, refin ? 127 : 128);
@@ -431,8 +431,8 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
             //Data alignment: [ax^0 bx^1 ... cx^n]
             uint128_t c = intrin_set(0, crc);
             uint128_t k2k1 = intrin_set(params->k2, params->k1);
-            uint128_t k4k3 = intrin_set(params->k[128 / 8], params->k[192 / 8]);
-            uint128_t k5k4 = intrin_set(params->k[64 / 8], params->k[128 / 8]);
+            uint128_t k4k3 = intrin_set(params->k[128 / 8 - 1], params->k[192 / 8 - 1]);
+            uint128_t k5k4 = intrin_set(params->k[64 / 8 - 1], params->k[128 / 8 - 1]);
             uint128_t kykx;
 
             //xor with the init.
@@ -443,7 +443,7 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
 
             //Fold unaligned bytes.
             if(offset) {
-                kykx = intrin_set(params->k[rem], params->k[rem + 8]);
+                kykx = intrin_set(params->k[rem - 1], params->k[rem + 8 - 1]);
                 y1 = intrin_loadu_le(buf - (16 - rem));
                 y1 = intrin_and(y1, intrin_shl(mask, 16 - rem));
                 x1 = fold(x1, y1, kykx);
@@ -495,7 +495,7 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
 
             //Fold the remaining bytes.
             if(len > 0) {
-                kykx = intrin_set(params->k[len], params->k[len + 8]);
+                kykx = intrin_set(params->k[len - 1], params->k[len + 8 - 1]);
                 y1 = intrin_loadu_le(buf - (16 - len));
                 y1 = intrin_and(y1, intrin_shl(mask, 16 - len));
                 x1 = fold(x1, y1, kykx);
@@ -509,8 +509,8 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
             //Data alignment: [ax^n bx^(n-1) ... cx^0]
             uint128_t c = intrin_set(crc, 0);
             uint128_t k1k2 = intrin_set(params->k1, params->k2);
-            uint128_t k3k4 = intrin_set(params->k[192 / 8], params->k[128 / 8]);
-            uint128_t k4k5 = intrin_set(params->k[128 / 8], params->k[64 / 8]);
+            uint128_t k3k4 = intrin_set(params->k[192 / 8 - 1], params->k[128 / 8 - 1]);
+            uint128_t k4k5 = intrin_set(params->k[128 / 8 - 1], params->k[64 / 8 - 1]);
             uint128_t kxky;
 
             //xor with the init.
@@ -521,7 +521,7 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
 
             //Fold unaligned bytes.
             if(offset) {
-                kxky = intrin_set(params->k[rem + 8], params->k[rem]);
+                kxky = intrin_set(params->k[rem + 8 - 1], params->k[rem - 1]);
                 y1 = intrin_loadu_bg(buf - (16 - rem));
                 y1 = intrin_and(y1, intrin_shr(mask, 16 - rem));
                 x1 = fold(x1, y1, kxky);
@@ -573,7 +573,7 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
 
             //Fold the remaining bytes.
             if(len > 0) {
-                kxky = intrin_set(params->k[len + 8], params->k[len]);
+                kxky = intrin_set(params->k[len + 8 - 1], params->k[len - 1]);
                 y1 = intrin_loadu_bg(buf - (16 - len));
                 y1 = intrin_and(y1, intrin_shr(mask, 16 - len));
                 x1 = fold(x1, y1, kxky);

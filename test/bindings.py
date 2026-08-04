@@ -22,7 +22,7 @@ class params_t(ctypes.Structure):
                ('k1', ctypes.c_uint64),
                ('k2', ctypes.c_uint64),
                ('u', ctypes.c_uint64),
-               ('k', ctypes.c_uint64 * 25),
+               ('k', ctypes.c_uint64 * 24),
                ('table', ctypes.c_uint64 * 256),
                ('combine_table', ctypes.c_uint64 * 64)]
 
