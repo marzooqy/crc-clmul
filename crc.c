@@ -371,7 +371,8 @@ static uint128_t fold(uint128_t x, uint128_t y, uint128_t k) {
     return intrin_tri_xor(h, l, y);
 }
 
-/* Multiply 64-bits integer a by 65-bits integer b. */
+/* Multiply the low bits of a by b. Used when it's not clear if the length of b
+   is 64-bits or 65-bits. */
 TARGET_ATTRIBUTE
 static uint128_t clmul65(uint128_t a, uint128_t b) {
     uint128_t hi = intrin_clmul_lo(a, intrin_shr(b, 8));
@@ -387,17 +388,20 @@ static uint64_t modp(params_t *params, uint128_t x) {
         //Add the implicit 1 back to the polynomial.
         uint128_t u = intrin_set(0, params->u);
         uint128_t p = intrin_set(params->poly >> 63, (params->poly << 1) | 1);
-        uint128_t t1 = clmul65(x, u);
-        uint128_t t2 = clmul65(t1, p);
-        uint128_t c = intrin_xor(x, t2);
+        uint128_t c = intrin_clmul_lo(x, u);
+        c = clmul65(c, p);
+        c = intrin_xor(x, c);
         return intrin_get(c, 1);
 
     } else {
-        uint128_t u = intrin_set(1, params->u);
-        uint128_t p = intrin_set(1, params->poly);
-        uint128_t t1 = clmul65(intrin_shr(x, 8), u);
-        uint128_t t2 = clmul65(intrin_shr(t1, 8), p);
-        uint128_t c = intrin_xor(x, t2);
+        /* We don't care about the high bit of the polynomial, since we only take
+           the low 64-bits of the result. */
+        const uint128_t m = intrin_set(0xffffffffffffffff, 0);
+        uint128_t u = intrin_set(params->u, 0);
+        uint128_t p = intrin_set(params->poly, 0);
+        uint128_t c = intrin_xor(intrin_and(x, m), intrin_clmul_hi(x, u));
+        c = intrin_clmul_hi(c, p);
+        c = intrin_xor(x, c);
         return intrin_get(c, 0);
     }
 }
@@ -417,8 +421,7 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
     uint64_t rem = 16 - offset;
 
     if(len >= 16 + rem) {
-        const uint128_t ones = intrin_set(0xffffffffffffffff, 0xffffffffffffffff);
-        const uint128_t zero = intrin_set(0, 0);
+        const uint128_t mask = intrin_set(0xffffffffffffffff, 0xffffffffffffffff);
         uint128_t x1, x2, x3, x4;
         uint128_t y1, y2, y3, y4;
 
@@ -428,7 +431,7 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
             uint128_t c = intrin_set(0, crc);
             uint128_t k2k1 = intrin_set(params->k2, params->k1);
             uint128_t k4k3 = intrin_set(params->k4, params->k3);
-            uint128_t k5k4 = intrin_set(1, params->k4);
+            uint128_t k4 = intrin_set(0, params->k4);
 
             //xor with the init.
             x1 = intrin_loadu_le(buf);
@@ -439,7 +442,7 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
             //Fold unaligned bytes.
             if(offset) {
                 y1 = intrin_loadu_le(buf - (16 - rem));
-                y1 = intrin_xor(intrin_shr(x1, rem), intrin_and(y1, intrin_shl(ones, 16 - rem)));
+                y1 = intrin_xor(intrin_shr(x1, rem), intrin_and(y1, intrin_shl(mask, 16 - rem)));
                 x1 = intrin_shl(x1, 16 - rem);
                 x1 = fold(x1, y1, k4k3);
                 buf += rem;
@@ -491,13 +494,13 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
             //Fold the remaining bytes.
             if(len > 0) {
                 y1 = intrin_loadu_le(buf - (16 - len));
-                y1 = intrin_xor(intrin_shr(x1, len), intrin_and(y1, intrin_shl(ones, 16 - len)));
+                y1 = intrin_xor(intrin_shr(x1, len), intrin_and(y1, intrin_shl(mask, 16 - len)));
                 x1 = intrin_shl(x1, 16 - len);
                 x1 = fold(x1, y1, k4k3);
             }
 
             //Add 64 zeros.
-            x1 = fold(x1, zero, k5k4);
+            x1 = intrin_xor(intrin_clmul_lo(x1, k4), intrin_shr(x1, 8));
 
         } else {
             //Non-reflected algorithm
@@ -505,7 +508,7 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
             uint128_t c = intrin_set(crc, 0);
             uint128_t k1k2 = intrin_set(params->k1, params->k2);
             uint128_t k3k4 = intrin_set(params->k3, params->k4);
-            uint128_t k4k5 = intrin_set(params->k4, params->poly);
+            uint128_t k4 = intrin_set(params->k4, 0);
 
             //xor with the init.
             x1 = intrin_loadu_bg(buf);
@@ -516,7 +519,7 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
             //Fold unaligned bytes.
             if(offset) {
                 y1 = intrin_loadu_bg(buf - (16 - rem));
-                y1 = intrin_xor(intrin_shl(x1, rem), intrin_and(y1, intrin_shr(ones, 16 - rem)));
+                y1 = intrin_xor(intrin_shl(x1, rem), intrin_and(y1, intrin_shr(mask, 16 - rem)));
                 x1 = intrin_shr(x1, 16 - rem);
                 x1 = fold(x1, y1, k3k4);
                 buf += rem;
@@ -568,13 +571,13 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
             //Fold the remaining bytes.
             if(len > 0) {
                 y1 = intrin_loadu_bg(buf - (16 - len));
-                y1 = intrin_xor(intrin_shl(x1, len), intrin_and(y1, intrin_shr(ones, 16 - len)));
+                y1 = intrin_xor(intrin_shl(x1, len), intrin_and(y1, intrin_shr(mask, 16 - len)));
                 x1 = intrin_shr(x1, 16 - len);
                 x1 = fold(x1, y1, k3k4);
             }
 
             //Add 64 zeros.
-            x1 = fold(x1, zero, k4k5);
+            x1 = intrin_xor(intrin_clmul_hi(x1, k4), intrin_shl(x1, 8));
         }
 
         return modp(params, x1);
@@ -636,16 +639,19 @@ static uint64_t multmodp_sw(params_t *params, uint64_t a, uint64_t b) {
 #ifndef DISABLE_SIMD
 TARGET_ATTRIBUTE
 static uint64_t multmodp_hw(params_t *params, uint64_t a, uint64_t b) {
-    const uint128_t x = intrin_set(0, 2); //x^1
     uint128_t ar = intrin_set(0, a);
-    uint128_t br = intrin_set(0, b);
+    uint128_t br, prod;
 
     //Shift to the left by 1 to account for reflection (Intel paper p20).
     if(params->refin) {
-        br = intrin_clmul_lo(br, x);
+        br = intrin_set(b >> 63, b << 1);
+        prod = clmul65(ar, br);
+    } else {
+        br = intrin_set(0, b);
+        prod = intrin_clmul_lo(ar, br);
     }
 
-    return modp(params, clmul65(ar, br));
+    return modp(params, prod);
 }
 #endif
 
