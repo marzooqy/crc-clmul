@@ -371,7 +371,8 @@ static uint128_t fold(uint128_t x, uint128_t y, uint128_t k) {
     return intrin_tri_xor(h, l, y);
 }
 
-/* Multiply 64-bits integer a by 65-bits integer b. */
+/* Multiply the low bits of a by b. Used when it's not clear if the length of b
+   is 64-bits or 65-bits. */
 TARGET_ATTRIBUTE
 static uint128_t clmul65(uint128_t a, uint128_t b) {
     uint128_t hi = intrin_clmul_lo(a, intrin_shr(b, 8));
@@ -387,17 +388,20 @@ static uint64_t modp(params_t *params, uint128_t x) {
         //Add the implicit 1 back to the polynomial.
         uint128_t u = intrin_set(0, params->u);
         uint128_t p = intrin_set(params->poly >> 63, (params->poly << 1) | 1);
-        uint128_t t1 = clmul65(x, u);
-        uint128_t t2 = clmul65(t1, p);
-        uint128_t c = intrin_xor(x, t2);
+        uint128_t c = intrin_clmul_lo(x, u);
+        c = clmul65(c, p);
+        c = intrin_xor(x, c);
         return intrin_get(c, 1);
 
     } else {
-        uint128_t u = intrin_set(1, params->u);
-        uint128_t p = intrin_set(1, params->poly);
-        uint128_t t1 = clmul65(intrin_shr(x, 8), u);
-        uint128_t t2 = clmul65(intrin_shr(t1, 8), p);
-        uint128_t c = intrin_xor(x, t2);
+        /* We don't care about the high bit of the polynomial, since we only take
+           the low 64-bits of the result. */
+        const uint128_t m = intrin_set(0xffffffffffffffff, 0);
+        uint128_t u = intrin_set(params->u, 0);
+        uint128_t p = intrin_set(params->poly, 0);
+        uint128_t c = intrin_xor(intrin_and(x, m), intrin_clmul_hi(x, u));
+        c = intrin_clmul_hi(c, p);
+        c = intrin_xor(x, c);
         return intrin_get(c, 0);
     }
 }
@@ -636,16 +640,19 @@ static uint64_t multmodp_sw(params_t *params, uint64_t a, uint64_t b) {
 #ifndef DISABLE_SIMD
 TARGET_ATTRIBUTE
 static uint64_t multmodp_hw(params_t *params, uint64_t a, uint64_t b) {
-    const uint128_t x = intrin_set(0, 2); //x^1
     uint128_t ar = intrin_set(0, a);
-    uint128_t br = intrin_set(0, b);
+    uint128_t br, prod;
 
     //Shift to the left by 1 to account for reflection (Intel paper p20).
     if(params->refin) {
-        br = intrin_clmul_lo(br, x);
+        br = intrin_set(b >> 63, b << 1);
+        prod = clmul65(ar, br);
+    } else {
+        br = intrin_set(0, b);
+        prod = intrin_clmul_lo(ar, br);
     }
 
-    return modp(params, clmul65(ar, br));
+    return modp(params, prod);
 }
 #endif
 
