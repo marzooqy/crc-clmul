@@ -107,7 +107,7 @@ typedef __m128i uint128_t;
 typedef uint64x2_t uint128_t;
 
 //Create a 64x2 vector from two 64-bit integers.
-#define intrin_set(hi, lo) vsetq_lane_u64(hi, vdupq_n_u64(lo), 1)
+#define intrin_set(hi, lo) vcombine_u64(vdup_n_u64(lo), vdup_n_u64(hi))
 
 //Extract a 64-bit integer from a 64x2 vector.
 #define intrin_get(x, i) vgetq_lane_u64(x, i)
@@ -119,18 +119,12 @@ typedef uint64x2_t uint128_t;
 #define intrin_loadu_le(ptr) vld1q_u64((uint64_t*)(ptr))
 
 //Multiply the high lanes of two 64x2 vectors.
-#define intrin_clmul_hi(a, b) vreinterpretq_u64_p128(vmull_high_p64(vreinterpretq_p64_u64(a), \
-                                                                    vreinterpretq_p64_u64(b)))
+#define intrin_clmul_hi(a, b) vreinterpretq_u64_p128(vmull_high_p64(vreinterpretq_p64_u64(a), vreinterpretq_p64_u64(b)))
 
 //Multiply the low lanes of two 64x2 vectors.
-//It gets ugly.
-#ifndef _MSC_VER
-#define intrin_clmul_lo(a, b) vreinterpretq_u64_p128(vmull_p64(vgetq_lane_p64(vreinterpretq_p64_u64(a), 0), \
-                                                               vgetq_lane_p64(vreinterpretq_p64_u64(b), 0)))
-#else
-#define intrin_clmul_lo(a, b) vreinterpretq_u64_p128(vmull_p64(vreinterpret_p64_u64(vget_low_u64(a)), \
-                                                               vreinterpret_p64_u64(vget_low_u64(b))))
-#endif
+/* It's easier to use vmull_high_p64, since MSVC uses a different definition
+   from GCC for vmull_p64. */
+#define intrin_clmul_lo(a, b) intrin_clmul_hi(vdupq_laneq_u64(a, 0), vdupq_laneq_u64(b, 0))
 
 //Swap the endianess of a 64x2 vector.
 #define intrin_swap(x) vreinterpretq_u64_u8(vqtbl1q_u8(vreinterpretq_u8_u64(x), vld1q_u8(SWAP_TABLE)))
