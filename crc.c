@@ -418,7 +418,7 @@ static uint64_t modp(params_t *params, uint128_t x) {
 TARGET_ATTRIBUTE
 static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len) {
     uint64_t offset = (uintptr_t)buf & 0xf;
-    uint64_t rem = 16 - offset;
+    uint64_t rem = (16 - offset) & 0xf;
 
     if(len >= 16 + rem) {
         const uint128_t mask = intrin_set(0xffffffffffffffff, 0xffffffffffffffff);
