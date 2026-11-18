@@ -19,13 +19,11 @@ typedef struct {
     uint64_t init;
     uint64_t xorout;
     uint64_t k1, k2, k3, k4;
-    uint64_t u;
     uint64_t table[256];
     uint64_t combine_table[64];
 } params_t;
 
-/* Create a params_t struct and initialize it with the provided parameters.
-   Calculate the values of k1, k2, and the table. */
+/* Create a params_t struct and initialize it with the provided parameters. */
 params_t DLL_EXPORT crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, bool refout, uint64_t xorout, uint64_t check, uint8_t *error);
 
 /* List of crc_params errors */

@@ -29,7 +29,6 @@
 /* Static function definitions */
 
 static uint64_t reflect(uint64_t x, uint8_t w);
-static uint64_t xndivp(params_t *params, uint64_t n);
 static uint64_t crc_initial(params_t *params, uint64_t crc);
 static uint64_t crc_final(params_t *params, uint64_t crc);
 static uint64_t crc_bytes(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len);
@@ -40,8 +39,7 @@ static void crc_build_combine_table(params_t *params);
 
 #ifndef DISABLE_SIMD
 static uint128_t fold(uint128_t x, uint128_t y, uint128_t k);
-static uint128_t clmul65(uint128_t a, uint128_t b);
-static uint64_t modp(params_t *params, uint128_t x);
+static uint64_t modp(params_t *params, uint128_t x, bool shift);
 static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *buf, uint64_t len);
 static uint64_t multmodp_hw(params_t *params, uint64_t a, uint64_t b);
 #endif
@@ -89,29 +87,6 @@ static uint64_t reflect(uint64_t x, uint8_t w) {
     return x >> (64 - w);
 }
 
-/* Calculate the result of dividing x^n by the polynomial.
-   64 <= n < 128. if n >= 128 then only the last 64 bits are returned. */
-static uint64_t xndivp(params_t *params, uint64_t n) {
-    uint64_t mod = params->poly;
-    uint64_t div;
-
-    if(params->refin) {
-        div = (uint64_t)1 << 63;
-        while(n-- > 64) {
-            div = (div >> 1) | (mod << 63);
-            mod = (mod >> 1) ^ (params->poly & and_mask(mod & 1));
-        }
-    } else {
-        div = 1;
-        while(n-- > 64) {
-            div = (div << 1) | (mod >> 63);
-            mod = (mod << 1) ^ (params->poly & and_mask(mod >> 63));
-        }
-    }
-
-    return div;
-}
-
 //----------------------------------------
 
 /* params_t constructor */
@@ -152,8 +127,6 @@ static uint64_t xndivp(params_t *params, uint64_t n) {
 
    k constants are used to fold the buffer (Intel paper p12).
    They are equal x^n mod p with varied values for n.
-
-   u is the constant used for the Barret Reduction.
 
    table holds the values for the byte-by-byte (or Sarwate) algorithm.
    It's the result of computing the CRC for every possible input byte.
@@ -222,7 +195,6 @@ params_t crc_params(uint8_t width, uint64_t poly, uint64_t init, bool refin, boo
     params.k3 = crc_zeros(&params, params.k4, 192-128);  //x^192 mod p | x^191 mod p
     params.k2 = crc_zeros(&params, params.k3, 512-192);  //x^512 mod p | x^511 mod p
     params.k1 = crc_zeros(&params, params.k2, 576-512);  //x^576 mod p | x^575 mod p
-    params.u = xndivp(&params, refin ? 127 : 128);       //x^128 / p | x^127 / p
     #endif
 
     crc_build_combine_table(&params);
@@ -371,46 +343,38 @@ static uint128_t fold(uint128_t x, uint128_t y, uint128_t k) {
     return intrin_tri_xor(h, l, y);
 }
 
-/* Multiply the low bits of a by b. Used when it's not clear if the length of b
-   is 64-bits or 65-bits. */
+/* Find the modulos of a 128-bits integer. shift accounts for reflection if it's
+   not already accounted for (Intel paper p20). */
 TARGET_ATTRIBUTE
-static uint128_t clmul65(uint128_t a, uint128_t b) {
-    uint128_t hi = intrin_clmul_lo(a, intrin_shr(b, 8));
-    uint128_t lo = intrin_clmul_lo(a, b);
-    return intrin_xor(intrin_shl(hi, 8), lo);
-}
+static uint64_t modp(params_t *params, uint128_t x, bool shift) {
+    uint64_t hi = intrin_get(x, 1);
+    uint64_t lo = intrin_get(x, 0);
 
-/* Find the modulos of a 128-bit integer using Barret Reduction (Intel paper p18,20).
-   Note that the constants u and p can be 65-bits long. */
-TARGET_ATTRIBUTE
-static uint64_t modp(params_t *params, uint128_t x) {
     if(params->refin) {
-        //Add the implicit 1 back to the polynomial.
-        uint128_t u = intrin_set(0, params->u);
-        uint128_t p = intrin_set(params->poly >> 63, (params->poly << 1) | 1);
-        uint128_t c = intrin_clmul_lo(x, u);
-        c = clmul65(c, p);
-        c = intrin_xor(x, c);
-        return intrin_get(c, 1);
+        if(shift) {
+            hi = (hi << 1) | (lo >> 63);
+            lo <<= 1;
+        }
+
+        for(uint8_t i = 0; i < 8; i++) {
+            lo = (lo >> 8) ^ params->table[lo & 0xff];
+        }
 
     } else {
-        /* We don't care about the high bit of the polynomial, since we only take
-           the low 64-bits of the result. */
-        const uint128_t m = intrin_set(0xffffffffffffffff, 0);
-        uint128_t u = intrin_set(params->u, 0);
-        uint128_t p = intrin_set(params->poly, 0);
-        uint128_t c = intrin_xor(intrin_and(x, m), intrin_clmul_hi(x, u));
-        c = intrin_clmul_hi(c, p);
-        c = intrin_xor(x, c);
-        return intrin_get(c, 0);
+        for(uint8_t i = 0; i < 8; i++) {
+            hi = (hi << 8) ^ params->table[hi >> 56];
+        }
     }
+
+    return hi ^ lo;
 }
 
 /* Hardware accelerated algorithm based on the version used in Chromium.
 
    The folding method (Intel paper p11-13) is used to reduce the buffer to a smaller
    buffer "congruent (modulo the polynomial) to the original one" (Intel paper p7).
-   The CRC of the folded buffer is then computed using Barret Reduction.
+   Since the new buffer is congruent, we could just use the CRC table to find the
+   CRC of the buffer. This allows us to skip the barret reduction.
 
    It should be possible to extend this algorithm to use the 256 and 512 bit
    variants of CLMUL, using a similar approach to the one shown here. */
@@ -421,9 +385,18 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
     uint64_t rem = (16 - offset) & 0xf;
 
     if(len >= 16 + rem) {
-        const uint128_t mask = intrin_set(0xffffffffffffffff, 0xffffffffffffffff);
+        const uint128_t z = intrin_set(0, 0);
         uint128_t x1, x2, x3, x4;
         uint128_t y1, y2, y3, y4;
+
+        //Calculate unaligned bytes.
+        crc = crc_bytes(params, crc, buf, rem);
+        buf += rem;
+        len -= rem;
+
+        #ifdef DEBUG
+        assert(((uintptr_t)buf & 0xf) == 0);
+        #endif
 
         if(params->refin) {
             //Reflected algorithm
@@ -431,27 +404,13 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
             uint128_t c = intrin_set(0, crc);
             uint128_t k2k1 = intrin_set(params->k2, params->k1);
             uint128_t k4k3 = intrin_set(params->k4, params->k3);
-            uint128_t k4 = intrin_set(0, params->k4);
+            uint128_t k5k4 = intrin_set(1, params->k4);
 
             //xor with the init.
-            x1 = intrin_loadu_le(buf);
+            x1 = intrin_load_le(buf);
             x1 = intrin_xor(x1, c);
             buf += 16;
             len -= 16;
-
-            //Fold unaligned bytes.
-            if(offset) {
-                y1 = intrin_loadu_le(buf - (16 - rem));
-                y1 = intrin_xor(intrin_shr(x1, rem), intrin_and(y1, intrin_shl(mask, 16 - rem)));
-                x1 = intrin_shl(x1, 16 - rem);
-                x1 = fold(x1, y1, k4k3);
-                buf += rem;
-                len -= rem;
-            }
-
-            #ifdef DEBUG
-            assert(((uintptr_t)buf & 0xf) == 0);
-            #endif
 
             if(len >= 48) {
                 x2 = intrin_load_le(buf);
@@ -491,16 +450,8 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
                 len -= 16;
             }
 
-            //Fold the remaining bytes.
-            if(len > 0) {
-                y1 = intrin_loadu_le(buf - (16 - len));
-                y1 = intrin_xor(intrin_shr(x1, len), intrin_and(y1, intrin_shl(mask, 16 - len)));
-                x1 = intrin_shl(x1, 16 - len);
-                x1 = fold(x1, y1, k4k3);
-            }
-
             //Add 64 zeros.
-            x1 = intrin_xor(intrin_clmul_lo(x1, k4), intrin_shr(x1, 8));
+            x1 = fold(x1, z, k5k4);
 
         } else {
             //Non-reflected algorithm
@@ -508,27 +459,13 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
             uint128_t c = intrin_set(crc, 0);
             uint128_t k1k2 = intrin_set(params->k1, params->k2);
             uint128_t k3k4 = intrin_set(params->k3, params->k4);
-            uint128_t k4 = intrin_set(params->k4, 0);
+            uint128_t k4k5 = intrin_set(params->k4, params->poly);
 
             //xor with the init.
-            x1 = intrin_loadu_bg(buf);
+            x1 = intrin_load_bg(buf);
             x1 = intrin_xor(x1, c);
             buf += 16;
             len -= 16;
-
-            //Fold unaligned bytes.
-            if(offset) {
-                y1 = intrin_loadu_bg(buf - (16 - rem));
-                y1 = intrin_xor(intrin_shl(x1, rem), intrin_and(y1, intrin_shr(mask, 16 - rem)));
-                x1 = intrin_shr(x1, 16 - rem);
-                x1 = fold(x1, y1, k3k4);
-                buf += rem;
-                len -= rem;
-            }
-
-            #ifdef DEBUG
-            assert(((uintptr_t)buf & 0xf) == 0);
-            #endif
 
             if(len >= 48) {
                 x2 = intrin_load_bg(buf);
@@ -568,19 +505,11 @@ static uint64_t crc_clmul(params_t *params, uint64_t crc, unsigned char const *b
                 len -= 16;
             }
 
-            //Fold the remaining bytes.
-            if(len > 0) {
-                y1 = intrin_loadu_bg(buf - (16 - len));
-                y1 = intrin_xor(intrin_shl(x1, len), intrin_and(y1, intrin_shr(mask, 16 - len)));
-                x1 = intrin_shr(x1, 16 - len);
-                x1 = fold(x1, y1, k3k4);
-            }
-
             //Add 64 zeros.
-            x1 = intrin_xor(intrin_clmul_hi(x1, k4), intrin_shl(x1, 8));
+            x1 = fold(x1, z, k4k5);
         }
 
-        return modp(params, x1);
+        crc = modp(params, x1, false);
     }
 
     return crc_bytes(params, crc, buf, len);
@@ -640,18 +569,11 @@ static uint64_t multmodp_sw(params_t *params, uint64_t a, uint64_t b) {
 TARGET_ATTRIBUTE
 static uint64_t multmodp_hw(params_t *params, uint64_t a, uint64_t b) {
     uint128_t ar = intrin_set(0, a);
-    uint128_t br, prod;
+    uint128_t br = intrin_set(0, b);
 
-    //Shift to the left by 1 to account for reflection (Intel paper p20).
-    if(params->refin) {
-        br = intrin_set(b >> 63, b << 1);
-        prod = clmul65(ar, br);
-    } else {
-        br = intrin_set(0, b);
-        prod = intrin_clmul_lo(ar, br);
-    }
+    uint128_t prod = intrin_clmul_lo(ar, br);
 
-    return modp(params, prod);
+    return modp(params, prod, true);
 }
 #endif
 
